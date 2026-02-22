@@ -70,6 +70,7 @@
     dateFieldWrap: byId("dateFieldWrap"),
     weekdayFieldWrap: byId("weekdayFieldWrap"),
     btnOpenSettings: byId("btnOpenSettings"),
+    btnOpenAdvancedMini: byId("btnOpenAdvancedMini"),
     defaultNoticeInput: byId("defaultNoticeInput"),
     defaultBlueNoticeInput: byId("defaultBlueNoticeInput"),
     settingsModal: byId("settingsModal"),
@@ -172,6 +173,12 @@
 
     els.btnToggleTuneAdvanced.addEventListener("click", () => {
       state.calendarOpen = !state.calendarOpen;
+      renderAll();
+    });
+
+    els.btnOpenAdvancedMini.addEventListener("click", () => {
+      if (state.tuneScope !== "specific") return;
+      state.tuneAdvancedOpen = !state.tuneAdvancedOpen;
       renderAll();
     });
 
@@ -282,7 +289,7 @@
 
     if (next === "specific") {
       state.mode = "override";
-      if (!opts.keepAdvancedState) state.tuneAdvancedOpen = true;
+      if (!opts.keepAdvancedState) state.tuneAdvancedOpen = false;
     } else {
       state.mode = "override";
       if (!opts.keepAdvancedState) state.tuneAdvancedOpen = false;
@@ -326,6 +333,8 @@
     els.tuneCalendarPanel.hidden = !state.calendarOpen;
     els.tuneAdvancedPanel.hidden = !(state.tuneAdvancedOpen && state.tuneScope === "specific");
     els.btnToggleTuneAdvanced.textContent = state.calendarOpen ? "Скрыть календарь" : "Календарь";
+    els.btnOpenAdvancedMini.hidden = state.tuneScope !== "specific";
+    els.btnOpenAdvancedMini.classList.toggle("is-active", state.tuneAdvancedOpen && state.tuneScope === "specific");
 
     toggleModeFields();
   }
@@ -465,6 +474,7 @@
 
     if (greenStart < 0) {
       state.tuneBoundaries = defaultTuneBoundaries();
+      state.segments = segmentsFromTuneBoundaries(state.tuneBoundaries);
       return;
     }
 
@@ -491,6 +501,8 @@
     }
 
     state.tuneBoundaries = normalizeTuneBoundaries([b1, b2, b3, b4]);
+    // Keep visible timeline colors and saved segments in lockstep with the 4 handles.
+    state.segments = segmentsFromTuneBoundaries(state.tuneBoundaries);
   }
 
   function renderTuneBoundaries() {
@@ -587,7 +599,7 @@
   async function openSpecificDateFromCalendar(isoDate) {
     state.date = isoDate;
     state.mode = "override";
-    state.tuneAdvancedOpen = true;
+    state.tuneAdvancedOpen = false;
     state.calendarOpen = false;
     hydrateControlsFromState();
     await setTuneScope("specific", { keepAdvancedState: true, forceReload: true });
