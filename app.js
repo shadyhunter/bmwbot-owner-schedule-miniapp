@@ -109,6 +109,7 @@
   const telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   let tuneDrag = null;
   let saveFxTimer = null;
+  let scheduleLoadRequestSeq = 0;
 
   init();
 
@@ -209,19 +210,16 @@
     els.modeSelect.addEventListener("change", async () => {
       state.mode = els.modeSelect.value;
       toggleModeFields();
-      renderAll();
       await loadSchedule();
     });
 
     els.dateInput.addEventListener("change", async () => {
       state.date = els.dateInput.value || todayISO();
-      renderAll();
       await loadSchedule();
     });
 
     els.weekdaySelect.addEventListener("change", async () => {
       state.weekday = els.weekdaySelect.value;
-      renderAll();
       await loadSchedule();
     });
 
@@ -822,7 +820,28 @@
     els.defaultBlueNoticeInput.value = "0";
   }
 
+  function captureScheduleLoadContext() {
+    return {
+      tuneScope: state.tuneScope,
+      mode: state.mode,
+      date: String(state.date || ""),
+      weekday: String(state.weekday || ""),
+    };
+  }
+
+  function isStaleScheduleLoad(requestId, ctx) {
+    if (requestId !== scheduleLoadRequestSeq) return true;
+    if (!ctx) return false;
+    return state.tuneScope !== ctx.tuneScope
+      || state.mode !== ctx.mode
+      || String(state.date || "") !== String(ctx.date || "")
+      || String(state.weekday || "") !== String(ctx.weekday || "");
+  }
+
   async function loadSchedule() {
+    const requestId = ++scheduleLoadRequestSeq;
+    const requestCtx = captureScheduleLoadContext();
+
     if (isGroupTuneScope()) {
       const loadedGroup = loadLocal(tuneScopeLocalKey());
       state.source = "local";
@@ -855,18 +874,30 @@
     logEvent(`Загрузка расписания (${state.mode})...`);
 
     let loaded = null;
+    const preloadedLocal = loadLocal(key);
+    if (preloadedLocal) {
+      applyLoadedSchedule(preloadedLocal);
+      state.source = "local";
+      state.lastLoadedFrom = "local";
+      renderAll();
+    }
+
     if (apiBase) {
       try {
         loaded = await fetchJson(url, { method: "GET" });
+        if (isStaleScheduleLoad(requestId, requestCtx)) return;
         state.source = "api";
         state.lastLoadedFrom = "api";
       } catch (err) {
+        if (isStaleScheduleLoad(requestId, requestCtx)) return;
         logEvent(`API недоступен, fallback на localStorage: ${safeErr(err)}`);
       }
     }
 
+    if (isStaleScheduleLoad(requestId, requestCtx)) return;
+
     if (!loaded) {
-      loaded = loadLocal(key);
+      loaded = preloadedLocal || loadLocal(key);
       state.source = "local";
       state.lastLoadedFrom = "local";
     }
@@ -984,7 +1015,7 @@
     const version = stored && (stored.version || (stored.data && stored.data.version));
     const ok = !!stored && version === payload.version;
     if (!ok) {
-      logEvent("РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ: Р»РѕРєР°Р»СЊРЅР°СЏ РїСЂРѕРІРµСЂРєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ РЅРµ РїСЂРѕС€Р»Р°.");
+      logEvent("Предупреждение: локальная проверка сохранения не прошла.");
     }
     return ok;
   }
