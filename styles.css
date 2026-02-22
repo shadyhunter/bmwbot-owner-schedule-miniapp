@@ -644,6 +644,10 @@ input[type="range"] {
   padding: 14px;
 }
 
+.modal-backdrop[hidden] {
+  display: none !important;
+}
+
 .modal-card {
   width: min(520px, 100%);
   border-radius: 16px;
