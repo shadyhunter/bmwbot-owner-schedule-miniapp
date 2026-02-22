@@ -58,7 +58,7 @@
     btnToggleTuneAdvanced: byId("btnToggleTuneAdvanced"),
     btnTuneAdvancedClose: byId("btnTuneAdvancedClose"),
     btnSaveSimple: byId("btnSaveSimple"),
-    simpleGreenNoticeInput: byId("simpleGreenNoticeInput"),
+    simpleGreenNoticeInput: byIdOptional("simpleGreenNoticeInput"),
     tuneScopeHint: byId("tuneScopeHint"),
     tuneCalendarPanel: byId("tuneCalendarPanel"),
     tuneCalendarList: byId("tuneCalendarList"),
@@ -72,7 +72,7 @@
     btnOpenSettings: byId("btnOpenSettings"),
     btnOpenAdvancedMini: byId("btnOpenAdvancedMini"),
     defaultNoticeInput: byId("defaultNoticeInput"),
-    defaultBlueNoticeInput: byId("defaultBlueNoticeInput"),
+    defaultBlueNoticeInput: byIdOptional("defaultBlueNoticeInput"),
     settingsModal: byId("settingsModal"),
     btnCloseSettings: byId("btnCloseSettings"),
     btnCancelSettings: byId("btnCancelSettings"),
@@ -188,13 +188,15 @@
       renderAll();
     });
 
-    els.simpleGreenNoticeInput.addEventListener("change", () => {
-      state.defaultNoticeMinutesGreen = clampInt(Number(els.simpleGreenNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesGreen);
-      state.defaultNoticeMinutesBlue = 0;
-      applyGlobalZoneNoticesToSegments();
-      logEvent("Обновлено N для зелёной зоны.");
-      renderAll();
-    });
+    if (els.simpleGreenNoticeInput) {
+      els.simpleGreenNoticeInput.addEventListener("change", () => {
+        state.defaultNoticeMinutesGreen = clampInt(Number(els.simpleGreenNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesGreen);
+        state.defaultNoticeMinutesBlue = 0;
+        applyGlobalZoneNoticesToSegments();
+        logEvent("Обновлено N для зелёной зоны.");
+        renderAll();
+      });
+    }
 
     [els.boundary1Range, els.boundary2Range, els.boundary3Range, els.boundary4Range].forEach((input, idx) => {
       input.addEventListener("input", () => {
@@ -327,7 +329,9 @@
       els.tuneScopeHint.textContent = `Конкретная дата: ${formatIsoDate(state.date)}. Этот шаблон не перезаписывает общие «Будни/Выходные».`;
     }
 
-    els.simpleGreenNoticeInput.value = String(clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90));
+    if (els.simpleGreenNoticeInput) {
+      els.simpleGreenNoticeInput.value = String(clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90));
+    }
     els.tuneCalendarPanel.hidden = !state.calendarOpen;
     els.tuneAdvancedPanel.hidden = !(state.tuneAdvancedOpen && state.tuneScope === "specific");
     els.btnToggleTuneAdvanced.textContent = state.calendarOpen ? "Скрыть календарь" : "Календарь";
@@ -807,17 +811,18 @@
   function applyGlobalSettingsFromModal() {
     state.defaultNoticeMinutesGreen = clampInt(Number(els.defaultNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesGreen);
     state.defaultNoticeMinutesBlue = 0;
-    els.defaultBlueNoticeInput.value = "0";
     applyGlobalZoneNoticesToSegments();
     syncTuneBoundariesFromSegments();
     closeSettingsModal();
-    logEvent("Обновлены глобальные N для зеленой и синей зоны.");
+    logEvent("Обновлено глобальное N для зеленой зоны.");
     renderAll();
   }
 
   function syncSettingsInputsFromState() {
     els.defaultNoticeInput.value = String(state.defaultNoticeMinutesGreen);
-    els.defaultBlueNoticeInput.value = "0";
+    if (els.defaultBlueNoticeInput) {
+      els.defaultBlueNoticeInput.value = "0";
+    }
   }
 
   function captureScheduleLoadContext() {
@@ -1869,5 +1874,9 @@
     const el = document.getElementById(id);
     if (!el) throw new Error(`Missing element #${id}`);
     return el;
+  }
+
+  function byIdOptional(id) {
+    return document.getElementById(id);
   }
 })();
