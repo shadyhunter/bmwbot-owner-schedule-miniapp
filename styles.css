@@ -90,14 +90,15 @@ body {
 
 .hero-logo {
   display: block;
-  width: clamp(120px, 18vw, 220px);
+  width: clamp(240px, 30vw, 420px);
   max-width: 100%;
   height: auto;
   object-fit: contain;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.2));
 }
 
 .hero h1 {
@@ -928,7 +929,7 @@ input[type="range"] {
   }
 
   .hero-logo {
-    width: clamp(132px, 38vw, 220px);
+    width: clamp(240px, 55vw, 420px);
   }
 }
 
@@ -943,8 +944,8 @@ input[type="range"] {
   }
 
   .hero-logo {
-    width: clamp(120px, 50vw, 200px);
-    border-radius: 10px;
+    width: clamp(220px, 72vw, 360px);
+    border-radius: 0;
   }
 
   .panel {
