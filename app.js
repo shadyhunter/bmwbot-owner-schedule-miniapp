@@ -636,14 +636,14 @@
   }
 
   function resolveTuneCalendarRowSource(isoDate) {
-    if (state.tuneScope === "specific" && state.date === isoDate) {
-      return { sourceKind: "override", segments: state.segments.slice() };
-    }
-
     const overridePayload = loadLocal(localKeyFor("override", isoDate, null));
     const overrideSegments = previewSegmentsFromPayload(overridePayload);
     if (overrideSegments) {
       return { sourceKind: "override", segments: overrideSegments };
+    }
+
+    if (state.tuneScope === "specific" && state.date === isoDate) {
+      return { sourceKind: "override", segments: state.segments.slice() };
     }
 
     const d = new Date(`${isoDate}T12:00:00`);
@@ -931,7 +931,7 @@
     syncTuneBoundariesFromSegments();
     const payload = buildPayload();
     if (isGroupTuneScope()) {
-      saveLocal(tuneScopeLocalKey(), payload);
+      persistLocalMirrorAndVerify(payload);
       state.source = "local";
       state.version = payload.version;
       state.lastLoadedFrom = "local";
@@ -955,6 +955,7 @@
         });
         state.source = "api";
         state.version = (result && (result.version || (result.data && result.data.version))) || state.version;
+        persistLocalMirrorAndVerify(payload);
         markScheduleSaved();
         applyPostSuccessfulSaveUi();
         logEvent("Сохранено через API.");
@@ -966,7 +967,7 @@
       }
     }
 
-    saveLocal(scheduleKey(), payload);
+    persistLocalMirrorAndVerify(payload);
     state.source = "local";
     state.version = payload.version;
     markScheduleSaved();
@@ -974,6 +975,18 @@
     logEvent("Сохранено локально (localStorage).");
     finishSaveButtonFx(true);
     renderAll();
+  }
+
+  function persistLocalMirrorAndVerify(payload) {
+    const key = scheduleKey();
+    saveLocal(key, payload);
+    const stored = loadLocal(key);
+    const version = stored && (stored.version || (stored.data && stored.data.version));
+    const ok = !!stored && version === payload.version;
+    if (!ok) {
+      logEvent("РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ: Р»РѕРєР°Р»СЊРЅР°СЏ РїСЂРѕРІРµСЂРєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ РЅРµ РїСЂРѕС€Р»Р°.");
+    }
+    return ok;
   }
 
   function buildPayload() {
