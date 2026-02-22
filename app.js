@@ -475,7 +475,29 @@
     }
 
     if (greenStart < 0) {
-      state.tuneBoundaries = defaultTuneBoundaries();
+      let blueStart = -1;
+      for (let i = 0; i < SLOTS_PER_DAY; i += 1) {
+        if (slots[i].zone === "OPEN_APPROVAL") {
+          blueStart = i;
+          break;
+        }
+      }
+
+      if (blueStart < 0) {
+        // All-red day is valid: keep every editable zone collapsed to zero.
+        state.tuneBoundaries = normalizeTuneBoundaries([0, 0, 0, 0]);
+        state.segments = segmentsFromTuneBoundaries(state.tuneBoundaries);
+        return;
+      }
+
+      let blueEnd = blueStart;
+      while (blueEnd < SLOTS_PER_DAY && slots[blueEnd].zone === "OPEN_APPROVAL") {
+        blueEnd += 1;
+      }
+
+      // No green zone: represent the visible blue run using the left blue segment,
+      // with green and right-blue collapsed to zero-width.
+      state.tuneBoundaries = normalizeTuneBoundaries([blueStart, blueEnd, blueEnd, blueEnd]);
       state.segments = segmentsFromTuneBoundaries(state.tuneBoundaries);
       return;
     }
