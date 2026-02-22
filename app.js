@@ -42,6 +42,7 @@
     owner: null,
     lastLoadedFrom: "local",
     lastSchedulePayload: null,
+    lastSaveMarker: null,
   };
 
   const els = {
@@ -106,6 +107,7 @@
 
   const telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   let tuneDrag = null;
+  let saveFxTimer = null;
 
   init();
 
@@ -328,6 +330,73 @@
     toggleModeFields();
   }
 
+  function getSaveButtonsForFx() {
+    const list = [];
+    if (els.btnSaveSimple) list.push(els.btnSaveSimple);
+    if (els.btnSave) list.push(els.btnSave);
+    return list;
+  }
+
+  function startSaveButtonFx() {
+    if (saveFxTimer) {
+      clearTimeout(saveFxTimer);
+      saveFxTimer = null;
+    }
+    getSaveButtonsForFx().forEach((btn) => {
+      if (!btn) return;
+      if (!btn.dataset.baseLabel) {
+        btn.dataset.baseLabel = (btn.textContent || "").trim();
+      }
+      btn.classList.remove("is-saved");
+      btn.classList.add("is-saving");
+      if (!btn.hidden) {
+        btn.textContent = btn.id === "btnSave" ? "Сохраняю дату..." : "Сохраняю...";
+      }
+      btn.disabled = true;
+    });
+  }
+
+  function finishSaveButtonFx(success) {
+    getSaveButtonsForFx().forEach((btn) => {
+      if (!btn) return;
+      btn.classList.remove("is-saving");
+      btn.disabled = false;
+      if (success) {
+        btn.classList.add("is-saved");
+        if (!btn.hidden) {
+          btn.textContent = btn.id === "btnSave" ? "Сохранено" : "Сохранено";
+        }
+      } else if (btn.dataset.baseLabel) {
+        btn.textContent = btn.dataset.baseLabel;
+      }
+    });
+
+    if (saveFxTimer) clearTimeout(saveFxTimer);
+    saveFxTimer = setTimeout(() => {
+      getSaveButtonsForFx().forEach((btn) => {
+        if (!btn) return;
+        btn.classList.remove("is-saved");
+        if (btn.dataset.baseLabel) btn.textContent = btn.dataset.baseLabel;
+      });
+      saveFxTimer = null;
+    }, success ? 1400 : 0);
+  }
+
+  function markScheduleSaved() {
+    state.lastSaveMarker = {
+      at: Date.now(),
+      tuneScope: state.tuneScope,
+      date: state.tuneScope === "specific" ? state.date : null,
+    };
+  }
+
+  function isRecentlySavedMarkerForDate(isoDate) {
+    const m = state.lastSaveMarker;
+    if (!m || !m.at) return false;
+    if ((Date.now() - m.at) > 3500) return false;
+    return m.tuneScope === "specific" && m.date === isoDate;
+  }
+
   function setTuneBoundary(index, value) {
     if (!Number.isFinite(value)) return;
     const arr = normalizeTuneBoundaries(state.tuneBoundaries);
@@ -533,7 +602,8 @@
     const dateLabel = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
     let tag = source.sourceKind === "override" ? "дата" : (isWeekend ? "выходные" : "будни");
-    if (isActive) tag = "редактируется";
+    if (isActive) tag = "открыта";
+    if (isRecentlySavedMarkerForDate(isoDate)) tag = "сохранено";
     return {
       isoDate,
       isActive,
@@ -836,6 +906,7 @@
   }
 
   async function saveSchedule() {
+    startSaveButtonFx();
     state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
     syncTuneBoundariesFromSegments();
     const payload = buildPayload();
@@ -844,7 +915,9 @@
       state.source = "local";
       state.version = payload.version;
       state.lastLoadedFrom = "local";
+      markScheduleSaved();
       logEvent(`Сохранено локально (${state.tuneScope === "weekdays" ? "будни" : "выходные"}).`);
+      finishSaveButtonFx(true);
       renderAll();
       return;
     }
@@ -861,7 +934,9 @@
         });
         state.source = "api";
         state.version = (result && (result.version || (result.data && result.data.version))) || state.version;
+        markScheduleSaved();
         logEvent("Сохранено через API.");
+        finishSaveButtonFx(true);
         renderAll();
         return;
       } catch (err) {
@@ -872,7 +947,9 @@
     saveLocal(scheduleKey(), payload);
     state.source = "local";
     state.version = payload.version;
+    markScheduleSaved();
     logEvent("Сохранено локально (localStorage).");
+    finishSaveButtonFx(true);
     renderAll();
   }
 
