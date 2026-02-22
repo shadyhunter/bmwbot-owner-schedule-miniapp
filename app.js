@@ -1,0 +1,1201 @@
+(function () {
+  "use strict";
+
+  const SLOT_MINUTES = 15;
+  const SLOTS_PER_DAY = 24 * 60 / SLOT_MINUTES;
+  const LOCAL_STORAGE_PREFIX = "bmwbot_kolyan_schedule_v1";
+  const DEFAULT_TIMEZONE = "Europe/Moscow";
+
+  const ZONES = {
+    OPEN_NOTICE: {
+      label: "Открыт (с предупреждением)",
+      className: "zone-open-notice",
+      note: "Можно подтверждать автоматически, если клиент предупредил заранее",
+    },
+    OPEN_APPROVAL: {
+      label: "Только по согласованию",
+      className: "zone-open-approval",
+      note: "Нужно спросить Коляна перед подтверждением",
+    },
+    CLOSED: {
+      label: "Закрыт",
+      className: "zone-closed",
+      note: "Не подтверждаем визит, предлагаем другое время",
+    },
+  };
+
+  const state = {
+    activeTab: "tune",
+    mode: "override",
+    date: todayISO(),
+    weekday: String(new Date().getDay()),
+    defaultNoticeMinutesGreen: 90,
+    defaultNoticeMinutesBlue: 30,
+    timezone: DEFAULT_TIMEZONE,
+    version: null,
+    source: "local",
+    segments: demoSegments({ green: 90, blue: 30 }),
+    owner: null,
+    lastLoadedFrom: "local",
+    lastSchedulePayload: null,
+  };
+
+  const els = {
+    tabButtons: Array.from(document.querySelectorAll("[data-tab-btn]")),
+    tabPanels: Array.from(document.querySelectorAll("[data-tab-panel]")),
+    ownerIdentity: byId("ownerIdentity"),
+    storageModeBadge: byId("storageModeBadge"),
+    scheduleVersion: byId("scheduleVersion"),
+    timezoneValue: byId("timezoneValue"),
+    modeSelect: byId("modeSelect"),
+    dateInput: byId("dateInput"),
+    weekdaySelect: byId("weekdaySelect"),
+    dateFieldWrap: byId("dateFieldWrap"),
+    weekdayFieldWrap: byId("weekdayFieldWrap"),
+    btnOpenSettings: byId("btnOpenSettings"),
+    defaultNoticeInput: byId("defaultNoticeInput"),
+    defaultBlueNoticeInput: byId("defaultBlueNoticeInput"),
+    settingsModal: byId("settingsModal"),
+    btnCloseSettings: byId("btnCloseSettings"),
+    btnCancelSettings: byId("btnCancelSettings"),
+    btnApplySettings: byId("btnApplySettings"),
+    btnToday: byId("btnToday"),
+    btnTomorrow: byId("btnTomorrow"),
+    btnCopyPrev: byId("btnCopyPrev"),
+    btnNormalize: byId("btnNormalize"),
+    btnAddSegment: byId("btnAddSegment"),
+    btnSave: byId("btnSave"),
+    hourAxis: byId("hourAxis"),
+    timelineGrid: byId("timelineGrid"),
+    segmentsList: byId("segmentsList"),
+    payloadPreview: byId("payloadPreview"),
+    eventLog: byId("eventLog"),
+    segmentRowTemplate: byId("segmentRowTemplate"),
+    todayArrivalsMeta: byId("todayArrivalsMeta"),
+    todayArrivalsList: byId("todayArrivalsList"),
+    todayPartsMeta: byId("todayPartsMeta"),
+    todayPartsList: byId("todayPartsList"),
+    todaySummaryMeta: byId("todaySummaryMeta"),
+    todaySummaryKpis: byId("todaySummaryKpis"),
+    todayOpenWindowsList: byId("todayOpenWindowsList"),
+    todaySummaryNotes: byId("todaySummaryNotes"),
+  };
+
+  const telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+
+  init();
+
+  function init() {
+    initTelegram();
+    bindTabNavigation();
+    bindControls();
+    renderHourAxis();
+    hydrateControlsFromState();
+    renderAll();
+    void loadSchedule();
+  }
+
+  function initTelegram() {
+    if (!telegram) {
+      els.ownerIdentity.textContent = "Browser mode (без Telegram). Можно тестировать локально.";
+      logEvent("Telegram WebApp API не найден, работаем в browser mode.");
+      return;
+    }
+
+    try {
+      telegram.ready();
+      telegram.expand();
+      if (telegram.disableVerticalSwipes) {
+        telegram.disableVerticalSwipes();
+      }
+    } catch (err) {
+      logEvent("Ошибка Telegram init: " + safeErr(err));
+    }
+
+    const user = telegram.initDataUnsafe && telegram.initDataUnsafe.user ? telegram.initDataUnsafe.user : null;
+    state.owner = user || null;
+    const ownerLabel = user
+      ? `Telegram: ${user.first_name || ""} ${user.last_name || ""} (@${user.username || "no_username"}, id=${user.id})`.trim()
+      : "Telegram user не определен (проверь запуск через бота)";
+    els.ownerIdentity.textContent = ownerLabel;
+
+    try {
+      if (telegram.MainButton) {
+        telegram.MainButton.setText("Сохранить расписание");
+        telegram.MainButton.onClick(saveSchedule);
+        telegram.MainButton.show();
+      }
+    } catch (err) {
+      logEvent("Не удалось активировать MainButton: " + safeErr(err));
+    }
+  }
+
+  function bindControls() {
+    els.modeSelect.addEventListener("change", async () => {
+      state.mode = els.modeSelect.value;
+      toggleModeFields();
+      renderAll();
+      await loadSchedule();
+    });
+
+    els.dateInput.addEventListener("change", async () => {
+      state.date = els.dateInput.value || todayISO();
+      renderAll();
+      await loadSchedule();
+    });
+
+    els.weekdaySelect.addEventListener("change", async () => {
+      state.weekday = els.weekdaySelect.value;
+      renderAll();
+      await loadSchedule();
+    });
+
+    els.btnOpenSettings.addEventListener("click", () => {
+      openSettingsModal();
+    });
+
+    els.btnCloseSettings.addEventListener("click", () => {
+      closeSettingsModal();
+    });
+
+    els.btnCancelSettings.addEventListener("click", () => {
+      closeSettingsModal();
+    });
+
+    els.btnApplySettings.addEventListener("click", () => {
+      applyGlobalSettingsFromModal();
+    });
+
+    els.settingsModal.addEventListener("click", (event) => {
+      if (event.target === els.settingsModal) {
+        closeSettingsModal();
+      }
+    });
+
+    els.btnToday.addEventListener("click", async () => {
+      state.mode = "override";
+      state.date = todayISO();
+      hydrateControlsFromState();
+      renderAll();
+      await loadSchedule();
+    });
+
+    els.btnTomorrow.addEventListener("click", async () => {
+      state.mode = "override";
+      state.date = addDaysISO(todayISO(), 1);
+      hydrateControlsFromState();
+      renderAll();
+      await loadSchedule();
+    });
+
+    els.btnCopyPrev.addEventListener("click", () => {
+      copyPreviousDayLocal();
+    });
+
+    els.btnNormalize.addEventListener("click", () => {
+      state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
+      logEvent("Сегменты нормализованы.");
+      renderAll();
+    });
+
+    els.btnAddSegment.addEventListener("click", () => {
+      addSegment();
+    });
+
+    els.btnSave.addEventListener("click", saveSchedule);
+  }
+
+  function bindTabNavigation() {
+    els.tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tab = btn.dataset.tabBtn;
+        if (!tab) return;
+        setActiveTab(tab);
+      });
+    });
+  }
+
+  function setActiveTab(tab) {
+    const allowed = new Set(["summary", "today", "parts", "tune"]);
+    const next = allowed.has(tab) ? tab : "tune";
+    if (state.activeTab === next) return;
+    state.activeTab = next;
+    renderTabPanels();
+  }
+
+  function renderTabPanels() {
+    els.tabPanels.forEach((panel) => {
+      panel.hidden = panel.dataset.tabPanel !== state.activeTab;
+    });
+    els.tabButtons.forEach((btn) => {
+      const isActive = btn.dataset.tabBtn === state.activeTab;
+      btn.classList.toggle("is-active", isActive);
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+    try {
+      if (telegram && telegram.MainButton) {
+        if (state.activeTab === "tune") {
+          telegram.MainButton.setText("Сохранить расписание");
+          telegram.MainButton.show();
+        } else {
+          telegram.MainButton.hide();
+        }
+      }
+    } catch (err) {
+      logEvent("Ошибка обновления MainButton: " + safeErr(err));
+    }
+  }
+
+  function openSettingsModal() {
+    syncSettingsInputsFromState();
+    els.settingsModal.hidden = false;
+  }
+
+  function closeSettingsModal() {
+    els.settingsModal.hidden = true;
+  }
+
+  function applyGlobalSettingsFromModal() {
+    state.defaultNoticeMinutesGreen = clampInt(Number(els.defaultNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesGreen);
+    state.defaultNoticeMinutesBlue = clampInt(Number(els.defaultBlueNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesBlue);
+    applyGlobalZoneNoticesToSegments();
+    closeSettingsModal();
+    logEvent("Обновлены глобальные N для зеленой и синей зоны.");
+    renderAll();
+  }
+
+  function syncSettingsInputsFromState() {
+    els.defaultNoticeInput.value = String(state.defaultNoticeMinutesGreen);
+    els.defaultBlueNoticeInput.value = String(state.defaultNoticeMinutesBlue);
+  }
+
+  async function loadSchedule() {
+    const key = scheduleKey();
+    const apiBase = getApiBase();
+    const target = state.mode === "override"
+      ? `date=${encodeURIComponent(state.date)}`
+      : `weekday=${encodeURIComponent(state.weekday)}`;
+    const url = `${apiBase ? apiBase.replace(/\/$/, "") : ""}/schedule?mode=${encodeURIComponent(state.mode)}&${target}`;
+
+    logEvent(`Загрузка расписания (${state.mode})...`);
+
+    let loaded = null;
+    if (apiBase) {
+      try {
+        loaded = await fetchJson(url, { method: "GET" });
+        state.source = "api";
+        state.lastLoadedFrom = "api";
+      } catch (err) {
+        logEvent(`API недоступен, fallback на localStorage: ${safeErr(err)}`);
+      }
+    }
+
+    if (!loaded) {
+      loaded = loadLocal(key);
+      state.source = "local";
+      state.lastLoadedFrom = "local";
+    }
+
+    if (!loaded) {
+      state.version = null;
+      state.segments = demoSegments({
+        green: state.defaultNoticeMinutesGreen,
+        blue: state.defaultNoticeMinutesBlue,
+      });
+      logEvent("Данных не найдено, подставлен demo-шаблон.");
+      renderAll();
+      return;
+    }
+
+    applyLoadedSchedule(loaded);
+    logEvent(`Загружено (${state.lastLoadedFrom}): ${state.segments.length} сегм.`);
+    renderAll();
+  }
+
+  function applyLoadedSchedule(payload) {
+    const data = payload.data || payload;
+    state.lastSchedulePayload = data;
+    state.version = data.version || null;
+    state.timezone = data.timezone || DEFAULT_TIMEZONE;
+    const legacyDefault = Number(data.default_notice_minutes);
+    if (Number.isFinite(legacyDefault)) {
+      state.defaultNoticeMinutesGreen = clampInt(legacyDefault, 0, 24 * 60, state.defaultNoticeMinutesGreen);
+    }
+    if (Number.isFinite(Number(data.default_notice_minutes_green))) {
+      state.defaultNoticeMinutesGreen = clampInt(Number(data.default_notice_minutes_green), 0, 24 * 60, state.defaultNoticeMinutesGreen);
+    }
+    if (Number.isFinite(Number(data.default_notice_minutes_blue))) {
+      state.defaultNoticeMinutesBlue = clampInt(Number(data.default_notice_minutes_blue), 0, 24 * 60, state.defaultNoticeMinutesBlue);
+    }
+    if (data.zone_notice_defaults && typeof data.zone_notice_defaults === "object") {
+      if (Number.isFinite(Number(data.zone_notice_defaults.OPEN_NOTICE))) {
+        state.defaultNoticeMinutesGreen = clampInt(Number(data.zone_notice_defaults.OPEN_NOTICE), 0, 24 * 60, state.defaultNoticeMinutesGreen);
+      }
+      if (Number.isFinite(Number(data.zone_notice_defaults.OPEN_APPROVAL))) {
+        state.defaultNoticeMinutesBlue = clampInt(Number(data.zone_notice_defaults.OPEN_APPROVAL), 0, 24 * 60, state.defaultNoticeMinutesBlue);
+      }
+    }
+    syncSettingsInputsFromState();
+    const incoming = Array.isArray(data.segments) ? data.segments : [];
+    const parsed = incoming.map(toSlotSegment).filter(Boolean);
+    state.segments = parsed.length
+      ? canonicalizeSegments(parsed, getZoneNoticeDefaults())
+      : demoSegments({
+          green: state.defaultNoticeMinutesGreen,
+          blue: state.defaultNoticeMinutesBlue,
+        });
+    applyGlobalZoneNoticesToSegments();
+  }
+
+  async function saveSchedule() {
+    state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
+    const payload = buildPayload();
+    const apiBase = getApiBase();
+
+    logEvent(`Сохранение расписания (${state.mode})...`);
+
+    if (apiBase) {
+      try {
+        const result = await fetchJson(`${apiBase.replace(/\/$/, "")}/schedule/save`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        state.source = "api";
+        state.version = (result && (result.version || (result.data && result.data.version))) || state.version;
+        logEvent("Сохранено через API.");
+        renderAll();
+        return;
+      } catch (err) {
+        logEvent(`Ошибка API save, fallback в localStorage: ${safeErr(err)}`);
+      }
+    }
+
+    saveLocal(scheduleKey(), payload);
+    state.source = "local";
+    state.version = payload.version;
+    logEvent("Сохранено локально (localStorage).");
+    renderAll();
+  }
+
+  function buildPayload() {
+    const version = new Date().toISOString();
+    return {
+      version,
+      timezone: state.timezone || DEFAULT_TIMEZONE,
+      mode: state.mode,
+      date: state.mode === "override" ? state.date : null,
+      weekday: state.mode === "template" ? Number(state.weekday) : null,
+      default_notice_minutes: state.defaultNoticeMinutesGreen,
+      default_notice_minutes_green: state.defaultNoticeMinutesGreen,
+      default_notice_minutes_blue: state.defaultNoticeMinutesBlue,
+      zone_notice_defaults: {
+        OPEN_NOTICE: state.defaultNoticeMinutesGreen,
+        OPEN_APPROVAL: state.defaultNoticeMinutesBlue,
+      },
+      owner: state.owner
+        ? {
+            id: state.owner.id,
+            username: state.owner.username || null,
+            first_name: state.owner.first_name || null,
+            last_name: state.owner.last_name || null,
+          }
+        : null,
+      telegram_init_data: telegram ? telegram.initData || null : null,
+      segments: state.segments.map((s) => ({
+        zone: s.zone,
+        start_min: s.startSlot * SLOT_MINUTES,
+        end_min: s.endSlot * SLOT_MINUTES,
+        notice_minutes: (s.zone === "OPEN_NOTICE" || s.zone === "OPEN_APPROVAL")
+          ? clampInt(
+              s.noticeMinutes ?? getDefaultNoticeForZone(s.zone) ?? 0,
+              0,
+              24 * 60,
+              getDefaultNoticeForZone(s.zone) ?? 0
+            )
+          : null,
+      })),
+    };
+  }
+
+  function renderAll() {
+    els.storageModeBadge.textContent = state.source;
+    els.scheduleVersion.textContent = state.version || "draft";
+    els.timezoneValue.textContent = state.timezone || DEFAULT_TIMEZONE;
+    syncSettingsInputsFromState();
+    renderTabPanels();
+    renderTimeline();
+    renderSegments();
+    renderWorkTabs();
+    renderPreview();
+  }
+
+  function renderHourAxis() {
+    els.hourAxis.innerHTML = "";
+    for (let h = 0; h < 24; h += 1) {
+      const span = document.createElement("span");
+      span.textContent = `${String(h).padStart(2, "0")}:00`;
+      els.hourAxis.appendChild(span);
+    }
+  }
+
+  function renderTimeline() {
+    const slotMap = expandToSlots(state.segments, getZoneNoticeDefaults());
+    els.timelineGrid.innerHTML = "";
+    for (let slot = 0; slot < SLOTS_PER_DAY; slot += 1) {
+      const div = document.createElement("div");
+      div.className = "timeline-slot";
+      div.dataset.zone = slotMap[slot].zone;
+      if (slot % 4 === 0) {
+        div.classList.add("qhour");
+      }
+      div.title = `${slotToTime(slot)}-${slotToTime(slot + 1)} | ${ZONES[slotMap[slot].zone].label}`;
+      els.timelineGrid.appendChild(div);
+    }
+  }
+
+  function getZoneNoticeDefaults() {
+    return {
+      OPEN_NOTICE: clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90),
+      OPEN_APPROVAL: clampInt(state.defaultNoticeMinutesBlue, 0, 24 * 60, 30),
+    };
+  }
+
+  function getDefaultNoticeForZone(zone) {
+    const defaults = getZoneNoticeDefaults();
+    if (zone === "OPEN_NOTICE") return defaults.OPEN_NOTICE;
+    if (zone === "OPEN_APPROVAL") return defaults.OPEN_APPROVAL;
+    return null;
+  }
+
+  function applyGlobalZoneNoticesToSegments() {
+    state.segments = (state.segments || []).map((segment) => ({
+      ...segment,
+      noticeMinutes: getDefaultNoticeForZone(segment.zone) ?? 0,
+    }));
+    state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
+  }
+
+  function renderSegments() {
+    els.segmentsList.innerHTML = "";
+    if (!state.segments.length) {
+      const p = document.createElement("p");
+      p.className = "muted";
+      p.textContent = "Сегментов нет.";
+      els.segmentsList.appendChild(p);
+      return;
+    }
+
+    state.segments.forEach((segment, index) => {
+      const node = els.segmentRowTemplate.content.firstElementChild.cloneNode(true);
+      const zoneMeta = ZONES[segment.zone];
+
+      const swatch = node.querySelector(".segment-swatch");
+      const title = node.querySelector(".segment-title");
+      const zoneSelect = node.querySelector(".segment-zone");
+      const startRange = node.querySelector(".segment-start");
+      const endRange = node.querySelector(".segment-end");
+      const startLabel = node.querySelector(".segment-start-label");
+      const endLabel = node.querySelector(".segment-end-label");
+      const noticeInput = node.querySelector(".segment-notice");
+      const durationChip = node.querySelector(".segment-duration");
+      const noteChip = node.querySelector(".segment-note");
+      const removeBtn = node.querySelector(".remove-segment-btn");
+
+      swatch.classList.add(zoneMeta.className);
+      title.textContent = `${index + 1}. ${zoneMeta.label}`;
+
+      for (const [zoneKey, info] of Object.entries(ZONES)) {
+        const option = document.createElement("option");
+        option.value = zoneKey;
+        option.textContent = info.label;
+        if (zoneKey === segment.zone) option.selected = true;
+        zoneSelect.appendChild(option);
+      }
+
+      startRange.value = String(segment.startSlot);
+      endRange.value = String(segment.endSlot);
+      startLabel.textContent = slotToTime(segment.startSlot);
+      endLabel.textContent = slotToTime(segment.endSlot);
+      noticeInput.value = String(getDefaultNoticeForZone(segment.zone) ?? 0);
+      noticeInput.disabled = true;
+
+      const durationMin = (segment.endSlot - segment.startSlot) * SLOT_MINUTES;
+      durationChip.textContent = `${durationMin} мин (${formatDuration(durationMin)})`;
+      noteChip.textContent = zoneMeta.note;
+
+      zoneSelect.addEventListener("change", () => {
+        patchSegment(index, {
+          zone: zoneSelect.value,
+          noticeMinutes: getDefaultNoticeForZone(zoneSelect.value) ?? 0,
+        });
+      });
+
+      startRange.addEventListener("input", () => {
+        let start = Number(startRange.value);
+        let end = Number(endRange.value);
+        if (start >= end) {
+          end = Math.min(SLOTS_PER_DAY, start + 1);
+          endRange.value = String(end);
+        }
+        patchSegment(index, { startSlot: start, endSlot: end });
+      });
+
+      endRange.addEventListener("input", () => {
+        let start = Number(startRange.value);
+        let end = Number(endRange.value);
+        if (end <= start) {
+          start = Math.max(0, end - 1);
+          startRange.value = String(start);
+        }
+        patchSegment(index, { startSlot: start, endSlot: end });
+      });
+
+      removeBtn.addEventListener("click", () => {
+        state.segments.splice(index, 1);
+        state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
+        logEvent(`Удален сегмент #${index + 1}.`);
+        renderAll();
+      });
+
+      els.segmentsList.appendChild(node);
+    });
+  }
+
+  function patchSegment(index, patch) {
+    const current = state.segments[index];
+    if (!current) return;
+    state.segments[index] = {
+      ...current,
+      ...patch,
+      startSlot: clampInt(Number((patch.startSlot ?? current.startSlot)), 0, SLOTS_PER_DAY - 1, 0),
+      endSlot: clampInt(Number((patch.endSlot ?? current.endSlot)), 1, SLOTS_PER_DAY, SLOTS_PER_DAY),
+      noticeMinutes: clampInt(
+        Number((patch.noticeMinutes ?? current.noticeMinutes ?? getDefaultNoticeForZone(patch.zone ?? current.zone) ?? 0)),
+        0,
+        24 * 60,
+        getDefaultNoticeForZone(patch.zone ?? current.zone) ?? 0
+      ),
+    };
+    if (state.segments[index].endSlot <= state.segments[index].startSlot) {
+      state.segments[index].endSlot = Math.min(SLOTS_PER_DAY, state.segments[index].startSlot + 1);
+    }
+    state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
+    renderAll();
+  }
+
+  function addSegment() {
+    const candidate = {
+      zone: "OPEN_NOTICE",
+      startSlot: minsToSlot(10 * 60),
+      endSlot: minsToSlot(18 * 60),
+      noticeMinutes: getDefaultNoticeForZone("OPEN_NOTICE") ?? 0,
+    };
+    state.segments = canonicalizeSegments(state.segments.concat(candidate), getZoneNoticeDefaults());
+    logEvent("Добавлен сегмент OPEN_NOTICE (10:00-18:00).");
+    renderAll();
+  }
+
+  function copyPreviousDayLocal() {
+    if (state.mode !== "override") {
+      logEvent("Копирование вчера работает только в режиме конкретной даты.");
+      return;
+    }
+    const prevKey = localKeyFor("override", addDaysISO(state.date, -1), null);
+    const prev = loadLocal(prevKey);
+    if (!prev) {
+      logEvent("В localStorage нет сохраненного расписания за предыдущий день.");
+      return;
+    }
+    applyLoadedSchedule(prev);
+    state.source = "local";
+    logEvent(`Скопировано локально из ${addDaysISO(state.date, -1)}.`);
+    renderAll();
+  }
+
+  function renderPreview() {
+    els.payloadPreview.textContent = JSON.stringify(buildPayload(), null, 2);
+  }
+
+  function renderWorkTabs() {
+    const snapshot = getTodayWorkSnapshot();
+    renderTodayArrivalsTab(snapshot);
+    renderTodayPartsTab(snapshot);
+    renderTodaySummaryTab(snapshot);
+  }
+
+  function getTodayWorkSnapshot() {
+    const today = todayISO();
+    const openWindows = buildOpenWindowsFromSegments(state.segments);
+    const backend = state.lastSchedulePayload && state.lastSchedulePayload.today_dashboard;
+
+    if (backend && typeof backend === "object") {
+      const arrivals = Array.isArray(backend.arrivals) ? backend.arrivals : [];
+      const parts = Array.isArray(backend.parts) ? backend.parts : [];
+      const notes = Array.isArray(backend.notes) ? backend.notes : [];
+      return finalizeWorkSnapshot({
+        date: backend.date || today,
+        source: backend.source ? String(backend.source) : "api",
+        arrivals: arrivals.map(normalizeArrivalItem).filter(Boolean),
+        parts: parts.map(normalizePartItem).filter(Boolean),
+        notes: notes.map((n) => String(n)).filter(Boolean),
+        openWindows,
+      });
+    }
+
+    return finalizeWorkSnapshot(buildDemoTodayWorkSnapshot(today, openWindows));
+  }
+
+  function buildDemoTodayWorkSnapshot(date, openWindows) {
+    const fallbackTimes = ["11:00", "13:30", "16:00", "18:30"];
+    const times = (openWindows.length ? openWindows.map((w) => w.start).slice(0, 4) : []).map((t, i) => {
+      if (i === 0) return t;
+      return shiftTimeString(t, 30);
+    });
+    while (times.length < 4) {
+      times.push(fallbackTimes[times.length]);
+    }
+
+    return {
+      date,
+      source: "demo",
+      arrivals: [
+        {
+          time: times[0],
+          title: "Алексей / F10 — установка комплекта",
+          subtitle: "Подтвержден, приедет с предупреждением",
+          statusLabel: "Подтвержден",
+          statusTone: "ok",
+        },
+        {
+          time: times[1],
+          title: "Игорь / E70 — самовывоз детали",
+          subtitle: "Нужно проверить остаток (1 шт на складе)",
+          statusLabel: "Уточнить у Коли",
+          statusTone: "warn",
+        },
+        {
+          time: times[2],
+          title: "Роман / F30 — вопрос по установке",
+          subtitle: "Рекомендуется fallback в Telegram",
+          statusLabel: "Согласование",
+          statusTone: "warn",
+        },
+        {
+          time: times[3],
+          title: "Окно под запись",
+          subtitle: "Можно занять под срочный приезд",
+          statusLabel: "Свободно",
+          statusTone: "ok",
+        },
+      ],
+      parts: [
+        {
+          qty: 1,
+          title: "КОМПЛЕКТ F10 передние черные",
+          subtitle: "Клиент: Игорь, ориентир " + times[1],
+          statusLabel: "Проверить остаток",
+          statusTone: "warn",
+        },
+        {
+          qty: 2,
+          title: "Кнопка руля F10 (левая/правая)",
+          subtitle: "Под выдачу и фото-подтверждение",
+          statusLabel: "Готово",
+          statusTone: "ok",
+        },
+        {
+          qty: 1,
+          title: "Селектор E70 (карбон)",
+          subtitle: "Клиент спрашивал совместимость",
+          statusLabel: "Нужна консультация",
+          statusTone: "warn",
+        },
+      ],
+      notes: [
+        "Если вопрос про установку/комплектацию — эскалировать в Telegram.",
+        "Остаток = 1: не подтверждать автоматически без Коли.",
+        "Фото лучше отправлять из каталога модели, top-2.",
+      ],
+      openWindows,
+    };
+  }
+
+  function finalizeWorkSnapshot(snapshot) {
+    const safe = snapshot && typeof snapshot === "object" ? snapshot : {};
+    const arrivals = Array.isArray(safe.arrivals) ? safe.arrivals : [];
+    const parts = Array.isArray(safe.parts) ? safe.parts : [];
+    const notes = Array.isArray(safe.notes) ? safe.notes : [];
+    const openWindows = Array.isArray(safe.openWindows) ? safe.openWindows : [];
+
+    const totalPartsQty = parts.reduce((sum, p) => sum + Math.max(0, Number(p.qty) || 0), 0);
+    const approvals = arrivals.filter((a) => a.statusTone === "warn" || a.statusTone === "danger").length
+      + parts.filter((p) => p.statusTone === "warn" || p.statusTone === "danger").length;
+    const openMinutes = openWindows.reduce((sum, w) => sum + (Number(w.durationMin) || 0), 0);
+
+    return {
+      date: typeof safe.date === "string" ? safe.date : todayISO(),
+      source: typeof safe.source === "string" ? safe.source : "demo",
+      arrivals,
+      parts,
+      notes,
+      openWindows,
+      summary: {
+        arrivalsCount: arrivals.length,
+        partsLinesCount: parts.length,
+        totalPartsQty,
+        approvalsCount: approvals,
+        openWindowsCount: openWindows.length,
+        openMinutes,
+      },
+    };
+  }
+
+  function normalizeArrivalItem(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    return {
+      time: typeof raw.time === "string" ? raw.time : "00:00",
+      title: String(raw.title || raw.customer || "Клиент"),
+      subtitle: String(raw.subtitle || raw.note || ""),
+      statusLabel: String(raw.statusLabel || raw.status || "Без статуса"),
+      statusTone: normalizeStatusTone(raw.statusTone || raw.status),
+    };
+  }
+
+  function normalizePartItem(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    return {
+      qty: Math.max(0, Number(raw.qty) || 0),
+      title: String(raw.title || raw.name || "Деталь"),
+      subtitle: String(raw.subtitle || raw.note || ""),
+      statusLabel: String(raw.statusLabel || raw.status || "Без статуса"),
+      statusTone: normalizeStatusTone(raw.statusTone || raw.status),
+    };
+  }
+
+  function normalizeStatusTone(value) {
+    const v = String(value || "").toLowerCase();
+    if (["ok", "done", "confirmed", "ready", "available"].includes(v)) return "ok";
+    if (["danger", "error", "stop", "none", "missing"].includes(v)) return "danger";
+    return "warn";
+  }
+
+  function renderTodayArrivalsTab(snapshot) {
+    els.todayArrivalsMeta.textContent = `${formatIsoDate(snapshot.date)} • ${snapshot.arrivals.length} записей • источник: ${snapshot.source}`;
+    renderList(
+      els.todayArrivalsList,
+      snapshot.arrivals.map((item) => ({
+        time: item.time,
+        title: item.title,
+        subtitle: item.subtitle,
+        statusLabel: item.statusLabel,
+        statusTone: item.statusTone,
+      })),
+      "На сегодня записей пока нет"
+    );
+  }
+
+  function renderTodayPartsTab(snapshot) {
+    els.todayPartsMeta.textContent = `${formatIsoDate(snapshot.date)} • ${snapshot.summary.partsLinesCount} позиций • всего штук: ${snapshot.summary.totalPartsQty}`;
+    renderList(
+      els.todayPartsList,
+      snapshot.parts.map((item) => ({
+        time: item.qty > 0 ? `x${item.qty}` : "-",
+        title: item.title,
+        subtitle: item.subtitle,
+        statusLabel: item.statusLabel,
+        statusTone: item.statusTone,
+      })),
+      "На сегодня детали еще не сформированы"
+    );
+  }
+
+  function renderTodaySummaryTab(snapshot) {
+    els.todaySummaryMeta.textContent = `${formatIsoDate(snapshot.date)} • источник: ${snapshot.source}`;
+    renderKpis(els.todaySummaryKpis, [
+      { label: "Записи", value: String(snapshot.summary.arrivalsCount) },
+      { label: "Детали (строки)", value: String(snapshot.summary.partsLinesCount) },
+      { label: "Штук деталей", value: String(snapshot.summary.totalPartsQty) },
+      { label: "Требуют внимания", value: String(snapshot.summary.approvalsCount) },
+      { label: "Окон работы", value: String(snapshot.summary.openWindowsCount) },
+      { label: "Открыто минут", value: String(snapshot.summary.openMinutes) },
+    ]);
+
+    renderList(
+      els.todayOpenWindowsList,
+      snapshot.openWindows.map((w) => ({
+        time: `${w.start}–${w.end}`,
+        title: w.title,
+        subtitle: w.subtitle,
+        statusLabel: w.statusLabel,
+        statusTone: w.statusTone,
+        compact: true,
+      })),
+      "Окон работы нет (день закрыт)"
+    );
+
+    const notesItems = (snapshot.notes || []).map((note, idx) => ({
+      title: `Пункт ${idx + 1}`,
+      subtitle: note,
+      statusLabel: "Фокус",
+      statusTone: "warn",
+      twoCol: true,
+    }));
+    renderList(els.todaySummaryNotes, notesItems, "Пока без заметок");
+  }
+
+  function renderKpis(container, kpis) {
+    container.innerHTML = "";
+    kpis.forEach((kpi) => {
+      const card = document.createElement("div");
+      card.className = "kpi-card";
+      const label = document.createElement("div");
+      label.className = "kpi-label";
+      label.textContent = kpi.label;
+      const value = document.createElement("div");
+      value.className = "kpi-value";
+      value.textContent = kpi.value;
+      card.appendChild(label);
+      card.appendChild(value);
+      container.appendChild(card);
+    });
+  }
+
+  function renderList(container, items, emptyMessage) {
+    container.innerHTML = "";
+    if (!Array.isArray(items) || items.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = emptyMessage;
+      container.appendChild(empty);
+      return;
+    }
+
+    items.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "work-item";
+      if (item.twoCol) row.classList.add("two-col");
+
+      if (!item.twoCol) {
+        const left = document.createElement("div");
+        left.className = "time-pill";
+        left.textContent = item.time || "--:--";
+        row.appendChild(left);
+      }
+
+      const main = document.createElement("div");
+      main.className = "main";
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = item.title || "";
+      main.appendChild(title);
+      if (item.subtitle) {
+        const sub = document.createElement("div");
+        sub.className = "sub";
+        sub.textContent = item.subtitle;
+        main.appendChild(sub);
+      }
+      row.appendChild(main);
+
+      const status = document.createElement("div");
+      status.className = `status-pill is-${normalizeStatusTone(item.statusTone)}`;
+      status.textContent = item.statusLabel || "OK";
+      row.appendChild(status);
+
+      container.appendChild(row);
+    });
+  }
+
+  function buildOpenWindowsFromSegments(segments) {
+    const list = [];
+    (segments || []).forEach((segment) => {
+      if (!segment || segment.zone === "CLOSED") return;
+      const start = slotToTime(segment.startSlot);
+      const end = slotToTime(segment.endSlot);
+      const durationMin = Math.max(0, (segment.endSlot - segment.startSlot) * SLOT_MINUTES);
+      const zoneLabel = segment.zone === "OPEN_NOTICE" ? "Зеленая зона" : "Синяя зона";
+      const notice = segment.zone === "OPEN_NOTICE"
+        ? `N=${getDefaultNoticeForZone("OPEN_NOTICE")} мин`
+        : `N=${getDefaultNoticeForZone("OPEN_APPROVAL")} мин`;
+      list.push({
+        start,
+        end,
+        durationMin,
+        title: zoneLabel,
+        subtitle: `${formatDuration(durationMin)} • ${notice}`,
+        statusLabel: segment.zone === "OPEN_NOTICE" ? "Авто" : "Согласование",
+        statusTone: segment.zone === "OPEN_NOTICE" ? "ok" : "warn",
+      });
+    });
+    return list;
+  }
+
+  function shiftTimeString(time, plusMinutes) {
+    const m = /^(\d{2}):(\d{2})$/.exec(String(time || ""));
+    if (!m) return "00:00";
+    const total = Math.max(0, Math.min(24 * 60 - 1, Number(m[1]) * 60 + Number(m[2]) + Number(plusMinutes || 0)));
+    const hh = String(Math.floor(total / 60)).padStart(2, "0");
+    const mm = String(total % 60).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+
+  function formatIsoDate(isoDate) {
+    try {
+      const d = new Date(`${isoDate}T12:00:00`);
+      return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+    } catch {
+      return String(isoDate || "");
+    }
+  }
+
+  function hydrateControlsFromState() {
+    els.modeSelect.value = state.mode;
+    els.dateInput.value = state.date;
+    els.weekdaySelect.value = state.weekday;
+    syncSettingsInputsFromState();
+    toggleModeFields();
+  }
+
+  function toggleModeFields() {
+    const isOverride = state.mode === "override";
+    els.dateFieldWrap.hidden = !isOverride;
+    els.weekdayFieldWrap.hidden = isOverride;
+  }
+
+  function scheduleKey() {
+    return localKeyFor(state.mode, state.date, state.weekday);
+  }
+
+  function localKeyFor(mode, date, weekday) {
+    const suffix = mode === "override" ? `date:${date}` : `weekday:${weekday}`;
+    return `${LOCAL_STORAGE_PREFIX}:${suffix}`;
+  }
+
+  function saveLocal(key, payload) {
+    try {
+      localStorage.setItem(key, JSON.stringify(payload));
+    } catch (err) {
+      logEvent("Ошибка localStorage save: " + safeErr(err));
+    }
+  }
+
+  function loadLocal(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      logEvent("Ошибка localStorage read: " + safeErr(err));
+      return null;
+    }
+  }
+
+  function getApiBase() {
+    const fromWindow = typeof window.__SCHEDULE_API_BASE__ === "string" ? window.__SCHEDULE_API_BASE__ : "";
+    const fromQuery = (() => {
+      try {
+        const u = new URL(window.location.href);
+        return u.searchParams.get("api_base") || "";
+      } catch {
+        return "";
+      }
+    })();
+    const fromLocal = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}:api_base`) || "";
+    if (fromWindow || fromQuery || fromLocal) {
+      return (fromWindow || fromQuery || fromLocal || "").trim();
+    }
+    if (typeof window !== "undefined" && window.location && /^https?:$/i.test(window.location.protocol)) {
+      const host = String(window.location.hostname || "").toLowerCase();
+      if (host === "hellobimmer.com" || host.endsWith(".hellobimmer.com")) {
+        return `${window.location.origin}/webhook/bmwbot-owner-schedule`;
+      }
+      return "https://hellobimmer.com/webhook/bmwbot-owner-schedule";
+    }
+    return "";
+  }
+
+  async function fetchJson(url, init) {
+    const headers = new Headers(init && init.headers ? init.headers : {});
+    if (telegram && telegram.initData) {
+      headers.set("X-Telegram-Init-Data", telegram.initData);
+    }
+    const response = await fetch(url, { ...init, headers });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+    }
+    return response.json();
+  }
+
+  function expandToSlots(segments, zoneDefaults) {
+    const defaults = zoneDefaults || getZoneNoticeDefaults();
+    const slots = Array.from({ length: SLOTS_PER_DAY }, () => ({
+      zone: "CLOSED",
+      noticeMinutes: null,
+    }));
+    for (const seg of segments) {
+      const start = clampInt(seg.startSlot, 0, SLOTS_PER_DAY, 0);
+      const end = clampInt(seg.endSlot, 0, SLOTS_PER_DAY, 0);
+      if (end <= start) continue;
+      for (let i = start; i < end; i += 1) {
+        slots[i] = {
+          zone: seg.zone in ZONES ? seg.zone : "CLOSED",
+          noticeMinutes: (seg.zone === "OPEN_NOTICE" || seg.zone === "OPEN_APPROVAL")
+            ? clampInt(
+                seg.noticeMinutes ?? defaults[seg.zone] ?? 0,
+                0,
+                24 * 60,
+                defaults[seg.zone] ?? 0
+              )
+            : null,
+        };
+      }
+    }
+    return slots;
+  }
+
+  function canonicalizeSegments(rawSegments, zoneDefaults) {
+    const defaults = zoneDefaults || getZoneNoticeDefaults();
+    const slots = expandToSlots(rawSegments, defaults);
+    const result = [];
+    let current = { ...slots[0] };
+    let start = 0;
+
+    for (let i = 1; i <= SLOTS_PER_DAY; i += 1) {
+      const atEnd = i === SLOTS_PER_DAY;
+      const next = atEnd ? null : slots[i];
+      const compareNotices = (
+        next &&
+        current &&
+        (next.zone === "OPEN_NOTICE" || next.zone === "OPEN_APPROVAL") &&
+        next.zone === current.zone
+      );
+      const changed = atEnd
+        || next.zone !== current.zone
+        || (compareNotices && next.noticeMinutes !== current.noticeMinutes);
+
+      if (changed) {
+        result.push({
+          zone: current.zone,
+          startSlot: start,
+          endSlot: i,
+          noticeMinutes: (current.zone === "OPEN_NOTICE" || current.zone === "OPEN_APPROVAL")
+            ? clampInt(current.noticeMinutes ?? defaults[current.zone] ?? 0, 0, 24 * 60, defaults[current.zone] ?? 0)
+            : 0,
+        });
+        if (!atEnd) {
+          start = i;
+          current = { ...next };
+        }
+      }
+    }
+
+    return result;
+  }
+
+  function toSlotSegment(segment) {
+    if (!segment || typeof segment !== "object") return null;
+    let startSlot = null;
+    let endSlot = null;
+    if (Number.isFinite(Number(segment.startSlot)) && Number.isFinite(Number(segment.endSlot))) {
+      startSlot = Number(segment.startSlot);
+      endSlot = Number(segment.endSlot);
+    } else if (Number.isFinite(Number(segment.start_min)) && Number.isFinite(Number(segment.end_min))) {
+      startSlot = minsToSlot(Number(segment.start_min));
+      endSlot = minsToSlot(Number(segment.end_min));
+    } else {
+      return null;
+    }
+    const zone = typeof segment.zone === "string" && segment.zone in ZONES ? segment.zone : "CLOSED";
+    const zoneDefaultNotice = getDefaultNoticeForZone(zone) ?? 0;
+    return {
+      zone,
+      startSlot: clampInt(startSlot, 0, SLOTS_PER_DAY - 1, 0),
+      endSlot: clampInt(endSlot, 1, SLOTS_PER_DAY, SLOTS_PER_DAY),
+      noticeMinutes: clampInt(Number(segment.notice_minutes ?? segment.noticeMinutes ?? zoneDefaultNotice), 0, 24 * 60, zoneDefaultNotice),
+    };
+  }
+
+  function demoSegments(defaults) {
+    const green = clampInt(Number(defaults && defaults.green), 0, 24 * 60, 90);
+    const blue = clampInt(Number(defaults && defaults.blue), 0, 24 * 60, 30);
+    return canonicalizeSegments(
+      [
+        { zone: "CLOSED", startSlot: 0, endSlot: minsToSlot(10 * 60), noticeMinutes: 0 },
+        { zone: "OPEN_NOTICE", startSlot: minsToSlot(10 * 60), endSlot: minsToSlot(18 * 60), noticeMinutes: green },
+        { zone: "OPEN_APPROVAL", startSlot: minsToSlot(18 * 60), endSlot: minsToSlot(20 * 60), noticeMinutes: blue },
+        { zone: "CLOSED", startSlot: minsToSlot(20 * 60), endSlot: SLOTS_PER_DAY, noticeMinutes: 0 },
+      ],
+      { OPEN_NOTICE: green, OPEN_APPROVAL: blue }
+    );
+  }
+
+  function minsToSlot(minutes) {
+    return Math.round(Number(minutes) / SLOT_MINUTES);
+  }
+
+  function slotToTime(slot) {
+    const minutes = clampInt(slot, 0, SLOTS_PER_DAY, 0) * SLOT_MINUTES;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+
+  function formatDuration(minutes) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h && m) return `${h}ч ${m}м`;
+    if (h) return `${h}ч`;
+    return `${m}м`;
+  }
+
+  function todayISO() {
+    const d = new Date();
+    return toISODate(d);
+  }
+
+  function addDaysISO(isoDate, days) {
+    const d = new Date(`${isoDate}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    return toISODate(d);
+  }
+
+  function toISODate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function clampInt(value, min, max, fallback) {
+    if (!Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(value)));
+  }
+
+  function safeErr(err) {
+    if (!err) return "unknown error";
+    return err.message || String(err);
+  }
+
+  function logEvent(message) {
+    const row = document.createElement("div");
+    row.className = "log-entry";
+    const ts = document.createElement("div");
+    ts.className = "time";
+    ts.textContent = new Date().toLocaleTimeString("ru-RU");
+    const msg = document.createElement("div");
+    msg.className = "msg";
+    msg.textContent = message;
+    row.appendChild(ts);
+    row.appendChild(msg);
+    els.eventLog.prepend(row);
+    while (els.eventLog.children.length > 60) {
+      els.eventLog.removeChild(els.eventLog.lastChild);
+    }
+  }
+
+  function byId(id) {
+    const el = document.getElementById(id);
+    if (!el) throw new Error(`Missing element #${id}`);
+    return el;
+  }
+})();

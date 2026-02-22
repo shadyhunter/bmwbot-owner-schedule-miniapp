@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BMWbot Schedule Mini App</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">BMWbot / Owner Mini App</p>
+        <h1>Расписание магазина</h1>
+        <p class="muted" id="ownerIdentity">Подключение к Telegram...</p>
+      </div>
+      <div class="status-card">
+        <div class="status-row">
+          <span class="label">Источник</span>
+          <span id="storageModeBadge" class="badge">local</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Версия</span>
+          <span id="scheduleVersion">-</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Таймзона</span>
+          <span id="timezoneValue">Europe/Moscow</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="tab-panels">
+    <section class="panel controls" data-tab-panel="tune">
+      <div class="control-grid">
+        <div class="field">
+          <label for="modeSelect">Режим</label>
+          <select id="modeSelect">
+            <option value="override">Конкретная дата</option>
+            <option value="template">Шаблон по дню недели</option>
+          </select>
+        </div>
+        <div class="field" id="dateFieldWrap">
+          <label for="dateInput">Дата</label>
+          <input id="dateInput" type="date">
+        </div>
+        <div class="field" id="weekdayFieldWrap" hidden>
+          <label for="weekdaySelect">День недели</label>
+          <select id="weekdaySelect">
+            <option value="1">Понедельник</option>
+            <option value="2">Вторник</option>
+            <option value="3">Среда</option>
+            <option value="4">Четверг</option>
+            <option value="5">Пятница</option>
+            <option value="6">Суббота</option>
+            <option value="0">Воскресенье</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Настройки зон</label>
+          <button type="button" id="btnOpenSettings">Открыть настройки</button>
+        </div>
+      </div>
+      <div class="quick-buttons">
+        <button type="button" class="ghost" id="btnToday">Сегодня</button>
+        <button type="button" class="ghost" id="btnTomorrow">Завтра</button>
+        <button type="button" class="ghost" id="btnCopyPrev">Скопировать вчера</button>
+        <button type="button" class="ghost" id="btnNormalize">Нормализовать</button>
+        <button type="button" id="btnAddSegment">Добавить сегмент</button>
+        <button type="button" class="accent" id="btnSave">Сохранить</button>
+      </div>
+    </section>
+
+    <section class="panel timeline-panel" data-tab-panel="tune">
+      <div class="timeline-header">
+        <h2>Таймлайн дня</h2>
+        <div class="legend">
+          <span class="legend-item"><i class="legend-chip zone-open-notice"></i>Зеленая зона (авто-подтверждение)</span>
+          <span class="legend-item"><i class="legend-chip zone-closed"></i>Красная зона (закрыто)</span>
+          <span class="legend-item"><i class="legend-chip zone-open-approval"></i>Синяя зона (по согласованию)</span>
+        </div>
+      </div>
+      <div class="hour-axis" id="hourAxis"></div>
+      <div class="timeline-grid-wrap">
+        <div class="timeline-grid" id="timelineGrid" aria-label="Timeline 24h"></div>
+      </div>
+      <div class="timeline-help">
+        Нажми на сегмент в списке ниже и настрой границы ползунками. Шаг: 15 минут.
+      </div>
+    </section>
+
+    <section class="panel" data-tab-panel="tune">
+      <div class="section-head">
+        <h2>Сегменты</h2>
+        <span class="muted">Редактор интервалов</span>
+      </div>
+      <div id="segmentsList" class="segments-list"></div>
+    </section>
+
+    <section class="panel split" data-tab-panel="tune">
+      <div>
+        <div class="section-head">
+          <h2>Итоговая структура</h2>
+          <span class="muted">Что уйдет в n8n</span>
+        </div>
+        <pre id="payloadPreview" class="payload-preview"></pre>
+      </div>
+      <div>
+        <div class="section-head">
+          <h2>Лог</h2>
+          <span class="muted">События UI / API</span>
+        </div>
+        <div id="eventLog" class="event-log"></div>
+      </div>
+    </section>
+
+    <section class="panel" data-tab-panel="today" hidden>
+      <div class="section-head">
+        <h2>Сегодня: записи</h2>
+        <span class="muted" id="todayArrivalsMeta">Список клиентов на сегодня по времени</span>
+      </div>
+      <div id="todayArrivalsList" class="work-list"></div>
+    </section>
+
+    <section class="panel" data-tab-panel="parts" hidden>
+      <div class="section-head">
+        <h2>Сегодня: детали</h2>
+        <span class="muted" id="todayPartsMeta">Какие детали нужны/выдаются сегодня</span>
+      </div>
+      <div id="todayPartsList" class="work-list"></div>
+    </section>
+
+    <section class="panel split summary-layout" data-tab-panel="summary" hidden>
+      <div>
+        <div class="section-head">
+          <h2>Сводка за сегодня</h2>
+          <span class="muted" id="todaySummaryMeta">Оперативная сводка</span>
+        </div>
+        <div id="todaySummaryKpis" class="kpi-grid"></div>
+        <div class="soft-block">
+          <div class="section-head compact">
+            <h2>Окна работы</h2>
+            <span class="muted">По текущему расписанию</span>
+          </div>
+          <div id="todayOpenWindowsList" class="work-list compact-list"></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-head">
+          <h2>Заметки дня</h2>
+          <span class="muted">Что держать в фокусе</span>
+        </div>
+        <div id="todaySummaryNotes" class="work-list compact-list"></div>
+      </div>
+    </section>
+    </main>
+
+    <nav class="bottom-nav" id="bottomNav" aria-label="Навигация по вкладкам">
+      <button type="button" class="bottom-nav-btn" data-tab-btn="summary" aria-pressed="false">
+        <span class="tab-icon" aria-hidden="true">::</span>
+        <span class="tab-label">Сводка</span>
+      </button>
+      <button type="button" class="bottom-nav-btn" data-tab-btn="today" aria-pressed="false">
+        <span class="tab-icon" aria-hidden="true">[]</span>
+        <span class="tab-label">Сегодня</span>
+      </button>
+      <button type="button" class="bottom-nav-btn" data-tab-btn="parts" aria-pressed="false">
+        <span class="tab-icon" aria-hidden="true">##</span>
+        <span class="tab-label">Детали</span>
+      </button>
+      <button type="button" class="bottom-nav-btn is-default" data-tab-btn="tune" aria-pressed="true">
+        <span class="tab-icon" aria-hidden="true">+</span>
+        <span class="tab-label">Тюнинг</span>
+      </button>
+    </nav>
+  </div>
+
+  <template id="segmentRowTemplate">
+    <article class="segment-row">
+      <div class="segment-head">
+        <div class="segment-name-wrap">
+          <span class="segment-swatch"></span>
+          <strong class="segment-title"></strong>
+        </div>
+        <button type="button" class="danger remove-segment-btn">Удалить</button>
+      </div>
+      <div class="segment-body">
+        <div class="segment-field">
+          <label>Зона</label>
+          <select class="segment-zone"></select>
+        </div>
+        <div class="segment-field">
+          <label>Начало</label>
+          <div class="range-wrap">
+            <input type="range" class="segment-start" min="0" max="95" step="1">
+            <span class="mono segment-start-label">00:00</span>
+          </div>
+        </div>
+        <div class="segment-field">
+          <label>Конец</label>
+          <div class="range-wrap">
+            <input type="range" class="segment-end" min="1" max="96" step="1">
+            <span class="mono segment-end-label">24:00</span>
+          </div>
+        </div>
+        <div class="segment-field">
+          <label>N заранее (мин)</label>
+          <input type="number" class="segment-notice" min="0" step="5">
+        </div>
+      </div>
+      <div class="segment-foot">
+        <span class="chip segment-duration">0 мин</span>
+        <span class="chip segment-note">-</span>
+      </div>
+    </article>
+  </template>
+
+  <div id="settingsModal" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+      <div class="modal-head">
+        <h2 id="settingsModalTitle">Настройки зон</h2>
+        <button type="button" class="ghost" id="btnCloseSettings">Закрыть</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="defaultNoticeInput">Зеленая зона: предупредить за N минут (глобально)</label>
+          <input id="defaultNoticeInput" type="number" min="0" step="5" value="90">
+        </div>
+        <div class="field">
+          <label for="defaultBlueNoticeInput">Синяя зона: предупредить за N минут (глобально)</label>
+          <input id="defaultBlueNoticeInput" type="number" min="0" step="5" value="30">
+        </div>
+        <p class="muted">
+          Эти значения применяются глобально ко всем сегментам зеленой и синей зоны в текущем дне/шаблоне.
+        </p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost" id="btnCancelSettings">Отмена</button>
+        <button type="button" class="accent" id="btnApplySettings">Применить</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
