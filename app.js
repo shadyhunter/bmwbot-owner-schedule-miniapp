@@ -145,7 +145,7 @@
     state.owner = user || null;
     const ownerLabel = user
       ? `Telegram: ${user.first_name || ""} ${user.last_name || ""} (@${user.username || "no_username"}, id=${user.id})`.trim()
-      : "Telegram user не определен (проверь запуск через бота)";
+      : "Telegram user не определен";
     els.ownerIdentity.textContent = ownerLabel;
 
     try {
