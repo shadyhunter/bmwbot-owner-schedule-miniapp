@@ -79,6 +79,7 @@
     btnSave: byId("btnSave"),
     hourAxis: byId("hourAxis"),
     timelineGrid: byId("timelineGrid"),
+    timelineBoundaryOverlay: byId("timelineBoundaryOverlay"),
     boundary1Range: byId("boundary1Range"),
     boundary2Range: byId("boundary2Range"),
     boundary3Range: byId("boundary3Range"),
@@ -99,6 +100,7 @@
   };
 
   const telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  let tuneDrag = null;
 
   init();
 
@@ -184,6 +186,11 @@
         setTuneBoundary(idx, Number(input.value));
       });
     });
+
+    els.timelineBoundaryOverlay.addEventListener("pointerdown", handleTimelineBoundaryPointerDown, { capture: true });
+    window.addEventListener("pointermove", handleTimelineBoundaryPointerMove, { passive: false });
+    window.addEventListener("pointerup", handleTimelineBoundaryPointerUp);
+    window.addEventListener("pointercancel", handleTimelineBoundaryPointerUp);
 
     els.modeSelect.addEventListener("change", async () => {
       state.mode = els.modeSelect.value;
@@ -408,6 +415,10 @@
     els.boundary2Range.value = String(b2);
     els.boundary3Range.value = String(b3);
     els.boundary4Range.value = String(b4);
+    if (els.boundarySummary) {
+      els.boundarySummary.innerHTML = "";
+    }
+    return;
 
     const zones = [
       ["red", "Красная", 0, b1],
@@ -424,6 +435,62 @@
       chip.textContent = `${label}: ${slotToTime(start)}-${slotToTime(end)} (${formatDuration(durationMin)})`;
       els.boundarySummary.appendChild(chip);
     });
+  }
+
+  function handleTimelineBoundaryPointerDown(event) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const slot = pointerClientXToTimelineSlot(event.clientX);
+    if (slot == null) return;
+    const boundaryIndex = findNearestTuneBoundaryIndex(slot);
+    tuneDrag = { pointerId: event.pointerId, boundaryIndex };
+    setTuneBoundary(boundaryIndex, slot);
+    try {
+      els.timelineBoundaryOverlay.setPointerCapture(event.pointerId);
+    } catch {
+      // no-op
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleTimelineBoundaryPointerMove(event) {
+    if (!tuneDrag || event.pointerId !== tuneDrag.pointerId) return;
+    const slot = pointerClientXToTimelineSlot(event.clientX);
+    if (slot == null) return;
+    setTuneBoundary(tuneDrag.boundaryIndex, slot);
+    event.preventDefault();
+  }
+
+  function handleTimelineBoundaryPointerUp(event) {
+    if (!tuneDrag || event.pointerId !== tuneDrag.pointerId) return;
+    try {
+      els.timelineBoundaryOverlay.releasePointerCapture(event.pointerId);
+    } catch {
+      // no-op
+    }
+    tuneDrag = null;
+  }
+
+  function pointerClientXToTimelineSlot(clientX) {
+    const rect = els.timelineGrid.getBoundingClientRect();
+    if (!rect || rect.width <= 0) return null;
+    const ratio = (Number(clientX) - rect.left) / rect.width;
+    const clamped = Math.min(1, Math.max(0, ratio));
+    return clampInt(clamped * SLOTS_PER_DAY, 0, SLOTS_PER_DAY, 0);
+  }
+
+  function findNearestTuneBoundaryIndex(slot) {
+    const boundaries = normalizeTuneBoundaries(state.tuneBoundaries);
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < boundaries.length; i += 1) {
+      const dist = Math.abs(boundaries[i] - slot);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
   }
 
   function isGroupTuneScope() {
