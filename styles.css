@@ -269,6 +269,25 @@ button.is-saved {
   animation: save-success-pop 0.6s ease;
 }
 
+button.is-saved::after {
+  content: "✓";
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 88%, white);
+  color: #062414;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid color-mix(in srgb, var(--accent) 65%, black);
+  box-shadow: 0 4px 12px rgba(45, 207, 149, 0.28);
+  animation: save-check-pop 0.45s ease;
+}
+
 @keyframes save-ring-pulse {
   0% {
     box-shadow:
@@ -299,6 +318,21 @@ button.is-saved {
   }
   100% {
     transform: scale(1);
+  }
+}
+
+@keyframes save-check-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 

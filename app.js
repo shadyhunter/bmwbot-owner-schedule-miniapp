@@ -390,6 +390,14 @@
     };
   }
 
+  function applyPostSuccessfulSaveUi() {
+    if (state.tuneScope === "specific") {
+      // After saving a specific date, return focus to the calendar list.
+      state.tuneAdvancedOpen = false;
+      state.calendarOpen = true;
+    }
+  }
+
   function isRecentlySavedMarkerForDate(isoDate) {
     const m = state.lastSaveMarker;
     if (!m || !m.at) return false;
@@ -916,6 +924,7 @@
       state.version = payload.version;
       state.lastLoadedFrom = "local";
       markScheduleSaved();
+      applyPostSuccessfulSaveUi();
       logEvent(`Сохранено локально (${state.tuneScope === "weekdays" ? "будни" : "выходные"}).`);
       finishSaveButtonFx(true);
       renderAll();
@@ -935,6 +944,7 @@
         state.source = "api";
         state.version = (result && (result.version || (result.data && result.data.version))) || state.version;
         markScheduleSaved();
+        applyPostSuccessfulSaveUi();
         logEvent("Сохранено через API.");
         finishSaveButtonFx(true);
         renderAll();
@@ -948,6 +958,7 @@
     state.source = "local";
     state.version = payload.version;
     markScheduleSaved();
+    applyPostSuccessfulSaveUi();
     logEvent("Сохранено локально (localStorage).");
     finishSaveButtonFx(true);
     renderAll();
