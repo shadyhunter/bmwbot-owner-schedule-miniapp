@@ -1266,17 +1266,24 @@ input[type="range"] {
   .hour-axis span {
     white-space: nowrap;
     overflow: visible;
-    transform: scale(0.82);
+    transform: scale(0.78);
     transform-origin: left center;
   }
 
-  .hour-axis span:nth-child(even) {
+  .hour-axis span {
     display: none;
+  }
+
+  /* Show labels every 4 hours and let each label occupy 4 hour-cells. */
+  .hour-axis span:nth-child(4n + 1) {
+    display: block;
+    grid-column: span 4;
   }
 
   .timeline-grid {
     min-width: 0;
     grid-template-columns: repeat(96, minmax(0, 1fr));
+    gap: 0;
   }
 
   .timeline-boundary-overlay {
@@ -1286,6 +1293,17 @@ input[type="range"] {
 
   .timeline-slot {
     min-height: 34px;
+  }
+
+  .timeline-boundary-overlay input[type="range"]::-webkit-slider-thumb {
+    width: 12px;
+    height: 30px;
+    margin-top: 5px;
+  }
+
+  .timeline-boundary-overlay input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 30px;
   }
 
   .quick-buttons button {
@@ -1316,5 +1334,30 @@ input[type="range"] {
     right: 10px;
     bottom: 10px;
     width: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .hour-axis {
+    font-size: 9px;
+  }
+
+  .hour-axis span {
+    transform: scale(0.72);
+  }
+
+  .timeline-slot {
+    min-height: 32px;
+  }
+
+  .timeline-boundary-overlay input[type="range"]::-webkit-slider-thumb {
+    width: 10px;
+    height: 28px;
+    margin-top: 6px;
+  }
+
+  .timeline-boundary-overlay input[type="range"]::-moz-range-thumb {
+    width: 10px;
+    height: 28px;
   }
 }
