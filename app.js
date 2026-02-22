@@ -28,6 +28,7 @@
     activeTab: "tune",
     tuneScope: "weekdays",
     tuneAdvancedOpen: false,
+    calendarOpen: false,
     mode: "override",
     date: todayISO(),
     weekday: String(new Date().getDay()),
@@ -58,6 +59,9 @@
     btnSaveSimple: byId("btnSaveSimple"),
     simpleGreenNoticeInput: byId("simpleGreenNoticeInput"),
     tuneScopeHint: byId("tuneScopeHint"),
+    tuneCalendarPanel: byId("tuneCalendarPanel"),
+    tuneCalendarList: byId("tuneCalendarList"),
+    tuneCalendarMeta: byId("tuneCalendarMeta"),
     tuneAdvancedPanel: byId("tuneAdvancedPanel"),
     modeSelect: byId("modeSelect"),
     dateInput: byId("dateInput"),
@@ -77,6 +81,7 @@
     btnNormalize: byId("btnNormalize"),
     btnAddSegment: byId("btnAddSegment"),
     btnSave: byId("btnSave"),
+    tuneTimelineTitle: byId("tuneTimelineTitle"),
     hourAxis: byId("hourAxis"),
     timelineGrid: byId("timelineGrid"),
     timelineBoundaryOverlay: byId("timelineBoundaryOverlay"),
@@ -164,13 +169,13 @@
     });
 
     els.btnToggleTuneAdvanced.addEventListener("click", () => {
-      state.tuneAdvancedOpen = !state.tuneAdvancedOpen;
-      renderTuneScopeControls();
+      state.calendarOpen = !state.calendarOpen;
+      renderAll();
     });
 
     els.btnTuneAdvancedClose.addEventListener("click", () => {
       state.tuneAdvancedOpen = false;
-      renderTuneScopeControls();
+      renderAll();
     });
 
     els.simpleGreenNoticeInput.addEventListener("change", () => {
@@ -295,7 +300,6 @@
     const defs = [
       ["weekdays", els.btnTuneWeekdays],
       ["weekends", els.btnTuneWeekends],
-      ["specific", els.btnTuneSpecific],
     ];
     defs.forEach(([scope, btn]) => {
       const active = state.tuneScope === scope;
@@ -303,18 +307,23 @@
       btn.setAttribute("aria-selected", active ? "true" : "false");
       btn.setAttribute("aria-pressed", active ? "true" : "false");
     });
+    if (els.btnTuneSpecific) {
+      els.btnTuneSpecific.setAttribute("aria-selected", state.tuneScope === "specific" ? "true" : "false");
+      els.btnTuneSpecific.setAttribute("aria-pressed", state.tuneScope === "specific" ? "true" : "false");
+    }
 
     if (state.tuneScope === "weekdays") {
-      els.tuneScopeHint.textContent = "Общий шаблон для будних дней. Конкретные даты настраиваются отдельно через «Специфика».";
+      els.tuneScopeHint.textContent = "Общий шаблон для будних дней. Конкретные даты настраиваются через кнопку «Календарь».";
     } else if (state.tuneScope === "weekends") {
-      els.tuneScopeHint.textContent = "Общий шаблон для выходных дней. Конкретные даты настраиваются отдельно через «Специфика».";
+      els.tuneScopeHint.textContent = "Общий шаблон для выходных дней. Конкретные даты настраиваются через кнопку «Календарь».";
     } else {
       els.tuneScopeHint.textContent = `Конкретная дата: ${formatIsoDate(state.date)}. Этот шаблон не перезаписывает общие «Будни/Выходные».`;
     }
 
     els.simpleGreenNoticeInput.value = String(clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90));
-    els.tuneAdvancedPanel.hidden = !state.tuneAdvancedOpen;
-    els.btnToggleTuneAdvanced.textContent = state.tuneAdvancedOpen ? "Скрыть специфику" : "Показать специфику";
+    els.tuneCalendarPanel.hidden = !state.calendarOpen;
+    els.tuneAdvancedPanel.hidden = !(state.tuneAdvancedOpen && state.tuneScope === "specific");
+    els.btnToggleTuneAdvanced.textContent = state.calendarOpen ? "Скрыть календарь" : "Календарь";
 
     toggleModeFields();
   }
@@ -437,6 +446,158 @@
     });
   }
 
+  function renderTuneCalendarPanel() {
+    if (!els.tuneCalendarPanel || !els.tuneCalendarList) return;
+    if (!state.calendarOpen) {
+      els.tuneCalendarList.innerHTML = "";
+      return;
+    }
+
+    const start = todayISO();
+    const rows = [];
+    for (let i = 0; i < 14; i += 1) {
+      const iso = addDaysISO(start, i);
+      rows.push(buildTuneCalendarRowData(iso));
+    }
+
+    els.tuneCalendarList.innerHTML = "";
+    rows.forEach((row) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tune-calendar-row";
+      if (row.isActive) btn.classList.add("is-active");
+
+      const dateBox = document.createElement("div");
+      dateBox.className = "tune-calendar-date";
+      const dateMain = document.createElement("div");
+      dateMain.className = "main";
+      dateMain.textContent = row.dateLabel;
+      const dateSub = document.createElement("div");
+      dateSub.className = "sub";
+      dateSub.textContent = row.dayLabel;
+      dateBox.appendChild(dateMain);
+      dateBox.appendChild(dateSub);
+
+      const mini = document.createElement("div");
+      mini.className = "tune-calendar-mini";
+      const miniTrack = document.createElement("div");
+      miniTrack.className = "tune-calendar-mini-track";
+      miniTrack.style.background = row.gradient;
+      mini.appendChild(miniTrack);
+
+      const tag = document.createElement("div");
+      tag.className = "tune-calendar-tag";
+      if (row.sourceKind === "override") tag.classList.add("is-override");
+      if (row.isActive) tag.classList.add("is-active");
+      tag.textContent = row.tag;
+
+      btn.appendChild(dateBox);
+      btn.appendChild(mini);
+      btn.appendChild(tag);
+
+      btn.addEventListener("click", () => {
+        void openSpecificDateFromCalendar(row.isoDate);
+      });
+
+      els.tuneCalendarList.appendChild(btn);
+    });
+
+    if (els.tuneCalendarMeta) {
+      els.tuneCalendarMeta.textContent = "Следующие 14 дней. Нажми строку, чтобы открыть редактирование конкретной даты.";
+    }
+  }
+
+  async function openSpecificDateFromCalendar(isoDate) {
+    state.date = isoDate;
+    state.mode = "override";
+    state.tuneAdvancedOpen = true;
+    state.calendarOpen = false;
+    hydrateControlsFromState();
+    await setTuneScope("specific", { keepAdvancedState: true, forceReload: true });
+    const timelinePanel = document.querySelector(".timeline-panel");
+    if (timelinePanel && typeof timelinePanel.scrollIntoView === "function") {
+      try {
+        timelinePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch {
+        timelinePanel.scrollIntoView();
+      }
+    }
+  }
+
+  function buildTuneCalendarRowData(isoDate) {
+    const isActive = state.tuneScope === "specific" && state.date === isoDate;
+    const source = resolveTuneCalendarRowSource(isoDate);
+    const gradient = buildMiniTimelineGradient(source.segments);
+    const d = new Date(`${isoDate}T12:00:00`);
+    const weekdayShort = d.toLocaleDateString("ru-RU", { weekday: "short" });
+    const dateLabel = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    let tag = source.sourceKind === "override" ? "дата" : (isWeekend ? "выходные" : "будни");
+    if (isActive) tag = "редактируется";
+    return {
+      isoDate,
+      isActive,
+      sourceKind: source.sourceKind,
+      gradient,
+      dayLabel: `${weekdayShort} • ${isoDate}`,
+      dateLabel,
+      tag,
+    };
+  }
+
+  function resolveTuneCalendarRowSource(isoDate) {
+    if (state.tuneScope === "specific" && state.date === isoDate) {
+      return { sourceKind: "override", segments: state.segments.slice() };
+    }
+
+    const overridePayload = loadLocal(localKeyFor("override", isoDate, null));
+    const overrideSegments = previewSegmentsFromPayload(overridePayload);
+    if (overrideSegments) {
+      return { sourceKind: "override", segments: overrideSegments };
+    }
+
+    const d = new Date(`${isoDate}T12:00:00`);
+    const weekend = d.getDay() === 0 || d.getDay() === 6;
+    const groupPayload = loadLocal(groupLocalKeyFor(weekend ? "weekends" : "weekdays"));
+    const groupSegments = previewSegmentsFromPayload(groupPayload);
+    if (groupSegments) {
+      return { sourceKind: weekend ? "group-weekends" : "group-weekdays", segments: groupSegments };
+    }
+
+    return {
+      sourceKind: "demo",
+      segments: demoSegments({ green: state.defaultNoticeMinutesGreen, blue: 0 }),
+    };
+  }
+
+  function previewSegmentsFromPayload(payload) {
+    if (!payload || typeof payload !== "object") return null;
+    const data = payload.data || payload;
+    const incoming = Array.isArray(data.segments) ? data.segments : [];
+    const parsed = incoming.map(toSlotSegment).filter(Boolean);
+    if (!parsed.length) return null;
+    return canonicalizeSegments(parsed, getZoneNoticeDefaults());
+  }
+
+  function buildMiniTimelineGradient(segments) {
+    const list = Array.isArray(segments) ? segments : [];
+    if (!list.length) {
+      return "linear-gradient(90deg, var(--zone-closed) 0%, var(--zone-closed) 100%)";
+    }
+    const stops = [];
+    list.forEach((segment) => {
+      const startPct = ((segment.startSlot || 0) / SLOTS_PER_DAY) * 100;
+      const endPct = ((segment.endSlot || 0) / SLOTS_PER_DAY) * 100;
+      const color = segment.zone === "OPEN_NOTICE"
+        ? "var(--zone-open-notice)"
+        : segment.zone === "OPEN_APPROVAL"
+          ? "var(--zone-open-approval)"
+          : "var(--zone-closed)";
+      stops.push(`${color} ${startPct.toFixed(2)}% ${endPct.toFixed(2)}%`);
+    });
+    return `linear-gradient(90deg, ${stops.join(", ")})`;
+  }
+
   function handleTimelineBoundaryPointerDown(event) {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     const slot = pointerClientXToTimelineSlot(event.clientX);
@@ -499,6 +660,10 @@
 
   function tuneScopeLocalKey() {
     return `${LOCAL_STORAGE_PREFIX}:group:${state.tuneScope}`;
+  }
+
+  function groupLocalKeyFor(scope) {
+    return `${LOCAL_STORAGE_PREFIX}:group:${scope}`;
   }
 
   function bindTabNavigation() {
@@ -765,6 +930,7 @@
     els.timezoneValue.textContent = state.timezone || DEFAULT_TIMEZONE;
     syncSettingsInputsFromState();
     renderTuneScopeControls();
+    renderTuneCalendarPanel();
     renderTabPanels();
     renderTimeline();
     renderSegments();
@@ -782,6 +948,15 @@
   }
 
   function renderTimeline() {
+    if (els.tuneTimelineTitle) {
+      if (state.tuneScope === "specific") {
+        els.tuneTimelineTitle.textContent = `Таймлайн дня (дата: ${formatIsoDate(state.date)})`;
+      } else if (state.tuneScope === "weekends") {
+        els.tuneTimelineTitle.textContent = "Таймлайн дня (шаблон выходных)";
+      } else {
+        els.tuneTimelineTitle.textContent = "Таймлайн дня (шаблон будней)";
+      }
+    }
     const slotMap = expandToSlots(state.segments, getZoneNoticeDefaults());
     els.timelineGrid.innerHTML = "";
     for (let slot = 0; slot < SLOTS_PER_DAY; slot += 1) {

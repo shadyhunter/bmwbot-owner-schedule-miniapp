@@ -44,15 +44,15 @@
         <div class="tune-scope-switch" role="tablist" aria-label="Тип расписания">
           <button type="button" id="btnTuneWeekdays" class="scope-btn is-active" role="tab" aria-selected="true">Будни</button>
           <button type="button" id="btnTuneWeekends" class="scope-btn" role="tab" aria-selected="false">Выходные</button>
-          <button type="button" id="btnTuneSpecific" class="scope-btn ghost" role="tab" aria-selected="false">Специфика</button>
+          <button type="button" id="btnTuneSpecific" class="scope-btn ghost" role="tab" aria-selected="false" hidden>Специфика</button>
         </div>
-        <div class="tune-inline-field">
+        <div class="tune-inline-field" hidden>
           <label for="simpleGreenNoticeInput">Зелёная зона: предупредить за N минут</label>
           <input id="simpleGreenNoticeInput" type="number" min="0" step="5" value="90">
         </div>
         <div class="tune-top-actions">
           <button type="button" class="ghost" id="btnOpenSettings">Настройки</button>
-          <button type="button" class="ghost" id="btnToggleTuneAdvanced">Показать специфику</button>
+          <button type="button" class="ghost" id="btnToggleTuneAdvanced">Календарь</button>
           <button type="button" class="accent" id="btnSaveSimple">Сохранить</button>
         </div>
       </div>
@@ -60,6 +60,14 @@
       <div id="tuneScopeHint" class="tune-scope-hint muted">
         Общий шаблон для будних дней. Конкретные даты настраиваются отдельно через «Специфика».
       </div>
+
+      <section id="tuneCalendarPanel" class="tune-calendar-panel" hidden>
+        <div class="tune-calendar-head">
+          <strong>Календарь</strong>
+          <span id="tuneCalendarMeta" class="muted">Следующие 14 дней. Нажми дату, чтобы открыть редактирование конкретного дня.</span>
+        </div>
+        <div id="tuneCalendarList" class="tune-calendar-list" aria-label="Календарь таймлайнов на 2 недели"></div>
+      </section>
 
       <section id="tuneAdvancedPanel" class="tune-advanced-panel" hidden>
         <div class="control-grid">
@@ -88,7 +96,7 @@
           </div>
           <div class="field">
             <label>Быстрые действия</label>
-            <button type="button" id="btnTuneAdvancedClose">Скрыть специфику</button>
+            <button type="button" id="btnTuneAdvancedClose">Скрыть редактирование даты</button>
           </div>
         </div>
         <div class="quick-buttons">
@@ -97,14 +105,14 @@
           <button type="button" class="ghost" id="btnCopyPrev">Скопировать вчера</button>
           <button type="button" class="ghost" id="btnNormalize">Нормализовать</button>
           <button type="button" id="btnAddSegment">Добавить сегмент</button>
-          <button type="button" class="accent" id="btnSave">Сохранить (специфика)</button>
+          <button type="button" class="accent" id="btnSave">Сохранить (дата)</button>
         </div>
       </section>
     </section>
 
     <section class="panel timeline-panel" data-tab-panel="tune">
       <div class="timeline-header">
-        <h2>Таймлайн дня</h2>
+        <h2 id="tuneTimelineTitle">Таймлайн дня</h2>
         <div class="legend">
           <span class="legend-item"><i class="legend-chip zone-open-notice"></i>Зеленая зона (авто-подтверждение)</span>
           <span class="legend-item"><i class="legend-chip zone-closed"></i>Красная зона (закрыто)</span>

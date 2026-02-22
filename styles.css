@@ -276,7 +276,7 @@ button.danger {
 
 .tune-scope-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
@@ -312,6 +312,116 @@ button.danger {
 .tune-scope-hint {
   margin-top: 8px;
   font-size: 12px;
+}
+
+.tune-calendar-panel {
+  margin-top: 8px;
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.tune-calendar-panel[hidden] {
+  display: none !important;
+}
+
+.tune-calendar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tune-calendar-head strong {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.tune-calendar-head .muted {
+  font-size: 11px;
+}
+
+.tune-calendar-list {
+  display: grid;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.tune-calendar-row {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 7px 8px;
+  display: grid;
+  grid-template-columns: 108px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tune-calendar-row:hover {
+  border-color: color-mix(in srgb, var(--accent-2) 24%, var(--line));
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tune-calendar-row.is-active {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.tune-calendar-date {
+  display: grid;
+  gap: 1px;
+}
+
+.tune-calendar-date .main {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tune-calendar-date .sub {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.tune-calendar-mini {
+  height: 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, white);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tune-calendar-mini-track {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.tune-calendar-tag {
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 4px 6px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tune-calendar-tag.is-override {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent-2) 30%, var(--line));
+}
+
+.tune-calendar-tag.is-active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .tune-advanced-panel {
@@ -988,6 +1098,39 @@ input[type="range"] {
 
   .tune-top-actions button {
     flex: 1 1 100%;
+  }
+
+  .tune-calendar-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .tune-calendar-list {
+    max-height: 280px;
+  }
+
+  .tune-calendar-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .tune-calendar-date {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    display: grid;
+    gap: 4px 8px;
+  }
+
+  .tune-calendar-date .sub {
+    justify-self: end;
+    text-align: right;
+    font-size: 10px;
+  }
+
+  .tune-calendar-tag {
+    justify-self: start;
   }
 
   .segment-body {
