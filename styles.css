@@ -1257,6 +1257,37 @@ input[type="range"] {
     justify-content: flex-start;
   }
 
+  /* Fit the 24h timeline on narrow screens instead of forcing a 960px track. */
+  .hour-axis {
+    font-size: 10px;
+    gap: 0;
+  }
+
+  .hour-axis span {
+    white-space: nowrap;
+    overflow: visible;
+    transform: scale(0.82);
+    transform-origin: left center;
+  }
+
+  .hour-axis span:nth-child(even) {
+    display: none;
+  }
+
+  .timeline-grid {
+    min-width: 0;
+    grid-template-columns: repeat(96, minmax(0, 1fr));
+  }
+
+  .timeline-boundary-overlay {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .timeline-slot {
+    min-height: 34px;
+  }
+
   .quick-buttons button {
     flex: 1 1 calc(50% - 8px);
   }
