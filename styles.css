@@ -210,6 +210,67 @@ button.danger {
   gap: 8px;
 }
 
+[data-tune-legacy="true"] {
+  display: none !important;
+}
+
+.tune-simple-top {
+  display: grid;
+  gap: 10px;
+}
+
+.tune-scope-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+}
+
+.scope-btn {
+  min-height: 42px;
+  font-weight: 700;
+}
+
+.scope-btn.is-active {
+  background: rgba(255, 255, 255, 0.32);
+  border-color: color-mix(in srgb, var(--accent-2) 28%, var(--line));
+}
+
+.tune-inline-field {
+  display: grid;
+  grid-template-columns: 1fr minmax(92px, 120px);
+  gap: 10px;
+  align-items: center;
+}
+
+.tune-inline-field label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.tune-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tune-scope-hint {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.tune-advanced-panel {
+  margin-top: 10px;
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.tune-advanced-panel[hidden] {
+  display: none !important;
+}
+
 .timeline-panel {
   overflow: hidden;
 }
@@ -282,6 +343,10 @@ button.danger {
   padding-bottom: 4px;
 }
 
+.tune-simple-grid-wrap {
+  position: relative;
+}
+
 .timeline-grid {
   display: grid;
   grid-template-columns: repeat(96, minmax(8px, 1fr));
@@ -291,6 +356,93 @@ button.danger {
   border-radius: 10px;
   border: 1px solid var(--line);
   overflow: hidden;
+}
+
+.timeline-boundary-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 4px;
+  min-width: 960px;
+  pointer-events: none;
+}
+
+.timeline-boundary-overlay input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 40px;
+  margin: 0;
+  pointer-events: auto;
+  background: transparent;
+  accent-color: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.timeline-boundary-overlay input[type="range"]::-webkit-slider-runnable-track {
+  height: 40px;
+  background: transparent;
+}
+
+.timeline-boundary-overlay input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 34px;
+  margin-top: 3px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  background: color-mix(in srgb, var(--text) 22%, white);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  cursor: ew-resize;
+}
+
+.timeline-boundary-overlay input[type="range"]::-moz-range-track {
+  height: 40px;
+  background: transparent;
+  border: none;
+}
+
+.timeline-boundary-overlay input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 34px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  background: color-mix(in srgb, var(--text) 22%, white);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  cursor: ew-resize;
+}
+
+.boundary-summary {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.boundary-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.boundary-chip.is-green {
+  border-color: color-mix(in srgb, var(--zone-open-notice) 50%, var(--line));
+  background: color-mix(in srgb, var(--zone-open-notice) 16%, white);
+}
+
+.boundary-chip.is-blue {
+  border-color: color-mix(in srgb, var(--zone-open-approval) 50%, var(--line));
+  background: color-mix(in srgb, var(--zone-open-approval) 14%, white);
+}
+
+.boundary-chip.is-red {
+  border-color: color-mix(in srgb, var(--zone-closed) 45%, var(--line));
+  background: color-mix(in srgb, var(--zone-closed) 12%, white);
 }
 
 .timeline-slot {
@@ -704,6 +856,18 @@ input[type="range"] {
     grid-template-columns: 1fr;
   }
 
+  .tune-inline-field {
+    grid-template-columns: 1fr;
+  }
+
+  .tune-scope-switch {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tune-scope-switch .scope-btn:last-child {
+    grid-column: 1 / -1;
+  }
+
   .controls .control-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -730,6 +894,10 @@ input[type="range"] {
 
   .controls .control-grid {
     grid-template-columns: 1fr;
+  }
+
+  .tune-top-actions button {
+    flex: 1 1 100%;
   }
 
   .segment-body {

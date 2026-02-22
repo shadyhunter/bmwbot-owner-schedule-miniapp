@@ -26,15 +26,18 @@
 
   const state = {
     activeTab: "tune",
+    tuneScope: "weekdays",
+    tuneAdvancedOpen: false,
     mode: "override",
     date: todayISO(),
     weekday: String(new Date().getDay()),
     defaultNoticeMinutesGreen: 90,
-    defaultNoticeMinutesBlue: 30,
+    defaultNoticeMinutesBlue: 0,
     timezone: DEFAULT_TIMEZONE,
     version: null,
     source: "local",
-    segments: demoSegments({ green: 90, blue: 30 }),
+    segments: demoSegments({ green: 90, blue: 0 }),
+    tuneBoundaries: [minsToSlot(9 * 60), minsToSlot(10 * 60), minsToSlot(18 * 60), minsToSlot(19 * 60)],
     owner: null,
     lastLoadedFrom: "local",
     lastSchedulePayload: null,
@@ -47,6 +50,15 @@
     storageModeBadge: byId("storageModeBadge"),
     scheduleVersion: byId("scheduleVersion"),
     timezoneValue: byId("timezoneValue"),
+    btnTuneWeekdays: byId("btnTuneWeekdays"),
+    btnTuneWeekends: byId("btnTuneWeekends"),
+    btnTuneSpecific: byId("btnTuneSpecific"),
+    btnToggleTuneAdvanced: byId("btnToggleTuneAdvanced"),
+    btnTuneAdvancedClose: byId("btnTuneAdvancedClose"),
+    btnSaveSimple: byId("btnSaveSimple"),
+    simpleGreenNoticeInput: byId("simpleGreenNoticeInput"),
+    tuneScopeHint: byId("tuneScopeHint"),
+    tuneAdvancedPanel: byId("tuneAdvancedPanel"),
     modeSelect: byId("modeSelect"),
     dateInput: byId("dateInput"),
     weekdaySelect: byId("weekdaySelect"),
@@ -67,6 +79,11 @@
     btnSave: byId("btnSave"),
     hourAxis: byId("hourAxis"),
     timelineGrid: byId("timelineGrid"),
+    boundary1Range: byId("boundary1Range"),
+    boundary2Range: byId("boundary2Range"),
+    boundary3Range: byId("boundary3Range"),
+    boundary4Range: byId("boundary4Range"),
+    boundarySummary: byId("boundarySummary"),
     segmentsList: byId("segmentsList"),
     payloadPreview: byId("payloadPreview"),
     eventLog: byId("eventLog"),
@@ -91,6 +108,7 @@
     bindControls();
     renderHourAxis();
     hydrateControlsFromState();
+    setTuneScope("weekdays", { skipLoad: true, keepAdvancedState: true });
     renderAll();
     void loadSchedule();
   }
@@ -131,6 +149,42 @@
   }
 
   function bindControls() {
+    els.btnTuneWeekdays.addEventListener("click", async () => {
+      await setTuneScope("weekdays");
+    });
+
+    els.btnTuneWeekends.addEventListener("click", async () => {
+      await setTuneScope("weekends");
+    });
+
+    els.btnTuneSpecific.addEventListener("click", async () => {
+      await setTuneScope("specific");
+    });
+
+    els.btnToggleTuneAdvanced.addEventListener("click", () => {
+      state.tuneAdvancedOpen = !state.tuneAdvancedOpen;
+      renderTuneScopeControls();
+    });
+
+    els.btnTuneAdvancedClose.addEventListener("click", () => {
+      state.tuneAdvancedOpen = false;
+      renderTuneScopeControls();
+    });
+
+    els.simpleGreenNoticeInput.addEventListener("change", () => {
+      state.defaultNoticeMinutesGreen = clampInt(Number(els.simpleGreenNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesGreen);
+      state.defaultNoticeMinutesBlue = 0;
+      applyGlobalZoneNoticesToSegments();
+      logEvent("Обновлено N для зелёной зоны.");
+      renderAll();
+    });
+
+    [els.boundary1Range, els.boundary2Range, els.boundary3Range, els.boundary4Range].forEach((input, idx) => {
+      input.addEventListener("input", () => {
+        setTuneBoundary(idx, Number(input.value));
+      });
+    });
+
     els.modeSelect.addEventListener("change", async () => {
       state.mode = els.modeSelect.value;
       toggleModeFields();
@@ -203,6 +257,181 @@
     });
 
     els.btnSave.addEventListener("click", saveSchedule);
+    els.btnSaveSimple.addEventListener("click", saveSchedule);
+  }
+
+  async function setTuneScope(scope, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const next = ["weekdays", "weekends", "specific"].includes(scope) ? scope : "weekdays";
+    const changed = state.tuneScope !== next;
+    state.tuneScope = next;
+
+    if (next === "specific") {
+      state.mode = "override";
+      if (!opts.keepAdvancedState) state.tuneAdvancedOpen = true;
+    } else {
+      state.mode = "override";
+      if (!opts.keepAdvancedState) state.tuneAdvancedOpen = false;
+    }
+
+    hydrateControlsFromState();
+    renderTuneScopeControls();
+
+    if (!opts.skipLoad && (changed || opts.forceReload)) {
+      await loadSchedule();
+      return;
+    }
+    renderAll();
+  }
+
+  function renderTuneScopeControls() {
+    const defs = [
+      ["weekdays", els.btnTuneWeekdays],
+      ["weekends", els.btnTuneWeekends],
+      ["specific", els.btnTuneSpecific],
+    ];
+    defs.forEach(([scope, btn]) => {
+      const active = state.tuneScope === scope;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+
+    if (state.tuneScope === "weekdays") {
+      els.tuneScopeHint.textContent = "Общий шаблон для будних дней. Конкретные даты настраиваются отдельно через «Специфика».";
+    } else if (state.tuneScope === "weekends") {
+      els.tuneScopeHint.textContent = "Общий шаблон для выходных дней. Конкретные даты настраиваются отдельно через «Специфика».";
+    } else {
+      els.tuneScopeHint.textContent = `Конкретная дата: ${formatIsoDate(state.date)}. Этот шаблон не перезаписывает общие «Будни/Выходные».`;
+    }
+
+    els.simpleGreenNoticeInput.value = String(clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90));
+    els.tuneAdvancedPanel.hidden = !state.tuneAdvancedOpen;
+    els.btnToggleTuneAdvanced.textContent = state.tuneAdvancedOpen ? "Скрыть специфику" : "Показать специфику";
+
+    toggleModeFields();
+  }
+
+  function setTuneBoundary(index, value) {
+    if (!Number.isFinite(value)) return;
+    const arr = normalizeTuneBoundaries(state.tuneBoundaries);
+    const i = clampInt(index, 0, 3, 0);
+    const min = i === 0 ? 0 : arr[i - 1];
+    const max = i === 3 ? SLOTS_PER_DAY : arr[i + 1];
+    arr[i] = clampInt(value, min, max, arr[i]);
+
+    for (let left = i - 1; left >= 0; left -= 1) {
+      if (arr[left] > arr[left + 1]) arr[left] = arr[left + 1];
+    }
+    for (let right = i + 1; right < arr.length; right += 1) {
+      if (arr[right] < arr[right - 1]) arr[right] = arr[right - 1];
+    }
+
+    state.tuneBoundaries = arr;
+    state.segments = segmentsFromTuneBoundaries(arr);
+    renderAll();
+  }
+
+  function defaultTuneBoundaries() {
+    return [minsToSlot(9 * 60), minsToSlot(10 * 60), minsToSlot(18 * 60), minsToSlot(19 * 60)];
+  }
+
+  function normalizeTuneBoundaries(boundaries) {
+    const arr = Array.isArray(boundaries) ? boundaries.slice(0, 4) : [];
+    while (arr.length < 4) arr.push(SLOTS_PER_DAY);
+    const out = arr.map((v) => clampInt(Number(v), 0, SLOTS_PER_DAY, 0));
+    for (let i = 1; i < out.length; i += 1) {
+      if (out[i] < out[i - 1]) out[i] = out[i - 1];
+    }
+    return out;
+  }
+
+  function segmentsFromTuneBoundaries(boundaries) {
+    const [b1, b2, b3, b4] = normalizeTuneBoundaries(boundaries);
+    return canonicalizeSegments(
+      [
+        { zone: "CLOSED", startSlot: 0, endSlot: b1, noticeMinutes: 0 },
+        { zone: "OPEN_APPROVAL", startSlot: b1, endSlot: b2, noticeMinutes: 0 },
+        { zone: "OPEN_NOTICE", startSlot: b2, endSlot: b3, noticeMinutes: getDefaultNoticeForZone("OPEN_NOTICE") ?? 0 },
+        { zone: "OPEN_APPROVAL", startSlot: b3, endSlot: b4, noticeMinutes: 0 },
+        { zone: "CLOSED", startSlot: b4, endSlot: SLOTS_PER_DAY, noticeMinutes: 0 },
+      ],
+      getZoneNoticeDefaults()
+    );
+  }
+
+  function syncTuneBoundariesFromSegments() {
+    const slots = expandToSlots(state.segments || [], getZoneNoticeDefaults());
+    let greenStart = -1;
+    for (let i = 0; i < SLOTS_PER_DAY; i += 1) {
+      if (slots[i].zone === "OPEN_NOTICE") {
+        greenStart = i;
+        break;
+      }
+    }
+
+    if (greenStart < 0) {
+      state.tuneBoundaries = defaultTuneBoundaries();
+      return;
+    }
+
+    let greenEnd = greenStart;
+    while (greenEnd < SLOTS_PER_DAY && slots[greenEnd].zone === "OPEN_NOTICE") {
+      greenEnd += 1;
+    }
+
+    let b1 = greenStart;
+    let b2 = greenStart;
+    let b3 = greenEnd;
+    let b4 = greenEnd;
+
+    if (b2 > 0 && slots[b2 - 1].zone === "OPEN_APPROVAL") {
+      let p = b2 - 1;
+      while (p >= 0 && slots[p].zone === "OPEN_APPROVAL") p -= 1;
+      b1 = p + 1;
+    }
+
+    if (b3 < SLOTS_PER_DAY && slots[b3].zone === "OPEN_APPROVAL") {
+      let p = b3;
+      while (p < SLOTS_PER_DAY && slots[p].zone === "OPEN_APPROVAL") p += 1;
+      b4 = p;
+    }
+
+    state.tuneBoundaries = normalizeTuneBoundaries([b1, b2, b3, b4]);
+  }
+
+  function renderTuneBoundaries() {
+    const [b1, b2, b3, b4] = normalizeTuneBoundaries(state.tuneBoundaries);
+    state.tuneBoundaries = [b1, b2, b3, b4];
+
+    els.boundary1Range.value = String(b1);
+    els.boundary2Range.value = String(b2);
+    els.boundary3Range.value = String(b3);
+    els.boundary4Range.value = String(b4);
+
+    const zones = [
+      ["red", "Красная", 0, b1],
+      ["blue", "Синяя", b1, b2],
+      ["green", "Зелёная", b2, b3],
+      ["blue", "Синяя", b3, b4],
+      ["red", "Красная", b4, SLOTS_PER_DAY],
+    ];
+    els.boundarySummary.innerHTML = "";
+    zones.forEach(([tone, label, start, end]) => {
+      const chip = document.createElement("div");
+      chip.className = `boundary-chip is-${tone}`;
+      const durationMin = Math.max(0, (end - start) * SLOT_MINUTES);
+      chip.textContent = `${label}: ${slotToTime(start)}-${slotToTime(end)} (${formatDuration(durationMin)})`;
+      els.boundarySummary.appendChild(chip);
+    });
+  }
+
+  function isGroupTuneScope() {
+    return state.tuneScope === "weekdays" || state.tuneScope === "weekends";
+  }
+
+  function tuneScopeLocalKey() {
+    return `${LOCAL_STORAGE_PREFIX}:group:${state.tuneScope}`;
   }
 
   function bindTabNavigation() {
@@ -257,8 +486,10 @@
 
   function applyGlobalSettingsFromModal() {
     state.defaultNoticeMinutesGreen = clampInt(Number(els.defaultNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesGreen);
-    state.defaultNoticeMinutesBlue = clampInt(Number(els.defaultBlueNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesBlue);
+    state.defaultNoticeMinutesBlue = 0;
+    els.defaultBlueNoticeInput.value = "0";
     applyGlobalZoneNoticesToSegments();
+    syncTuneBoundariesFromSegments();
     closeSettingsModal();
     logEvent("Обновлены глобальные N для зеленой и синей зоны.");
     renderAll();
@@ -266,10 +497,32 @@
 
   function syncSettingsInputsFromState() {
     els.defaultNoticeInput.value = String(state.defaultNoticeMinutesGreen);
-    els.defaultBlueNoticeInput.value = String(state.defaultNoticeMinutesBlue);
+    els.defaultBlueNoticeInput.value = "0";
   }
 
   async function loadSchedule() {
+    if (isGroupTuneScope()) {
+      const loadedGroup = loadLocal(tuneScopeLocalKey());
+      state.source = "local";
+      state.lastLoadedFrom = "local";
+      if (!loadedGroup) {
+        state.version = null;
+        state.segments = demoSegments({
+          green: state.defaultNoticeMinutesGreen,
+          blue: 0,
+        });
+        syncTuneBoundariesFromSegments();
+        logEvent(`Нет сохранённых данных для ${state.tuneScope === "weekdays" ? "будней" : "выходных"}, использован базовый шаблон.`);
+        renderAll();
+        return;
+      }
+      applyLoadedSchedule(loadedGroup);
+      logEvent(`Загружено локально (${state.tuneScope}): ${state.segments.length} сегм.`);
+      syncTuneBoundariesFromSegments();
+      renderAll();
+      return;
+    }
+
     const key = scheduleKey();
     const apiBase = getApiBase();
     const target = state.mode === "override"
@@ -300,8 +553,9 @@
       state.version = null;
       state.segments = demoSegments({
         green: state.defaultNoticeMinutesGreen,
-        blue: state.defaultNoticeMinutesBlue,
+        blue: 0,
       });
+      syncTuneBoundariesFromSegments();
       logEvent("Данных не найдено, подставлен demo-шаблон.");
       renderAll();
       return;
@@ -335,6 +589,7 @@
         state.defaultNoticeMinutesBlue = clampInt(Number(data.zone_notice_defaults.OPEN_APPROVAL), 0, 24 * 60, state.defaultNoticeMinutesBlue);
       }
     }
+    state.defaultNoticeMinutesBlue = 0;
     syncSettingsInputsFromState();
     const incoming = Array.isArray(data.segments) ? data.segments : [];
     const parsed = incoming.map(toSlotSegment).filter(Boolean);
@@ -342,14 +597,25 @@
       ? canonicalizeSegments(parsed, getZoneNoticeDefaults())
       : demoSegments({
           green: state.defaultNoticeMinutesGreen,
-          blue: state.defaultNoticeMinutesBlue,
+          blue: 0,
         });
     applyGlobalZoneNoticesToSegments();
+    syncTuneBoundariesFromSegments();
   }
 
   async function saveSchedule() {
     state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
+    syncTuneBoundariesFromSegments();
     const payload = buildPayload();
+    if (isGroupTuneScope()) {
+      saveLocal(tuneScopeLocalKey(), payload);
+      state.source = "local";
+      state.version = payload.version;
+      state.lastLoadedFrom = "local";
+      logEvent(`Сохранено локально (${state.tuneScope === "weekdays" ? "будни" : "выходные"}).`);
+      renderAll();
+      return;
+    }
     const apiBase = getApiBase();
 
     logEvent(`Сохранение расписания (${state.mode})...`);
@@ -379,19 +645,27 @@
   }
 
   function buildPayload() {
+    const [b1, b2, b3, b4] = normalizeTuneBoundaries(state.tuneBoundaries);
     const version = new Date().toISOString();
     return {
       version,
       timezone: state.timezone || DEFAULT_TIMEZONE,
-      mode: state.mode,
-      date: state.mode === "override" ? state.date : null,
-      weekday: state.mode === "template" ? Number(state.weekday) : null,
+      mode: isGroupTuneScope() ? "group" : state.mode,
+      tune_scope: state.tuneScope,
+      date: (!isGroupTuneScope() && state.mode === "override") ? state.date : null,
+      weekday: (!isGroupTuneScope() && state.mode === "template") ? Number(state.weekday) : null,
       default_notice_minutes: state.defaultNoticeMinutesGreen,
       default_notice_minutes_green: state.defaultNoticeMinutesGreen,
-      default_notice_minutes_blue: state.defaultNoticeMinutesBlue,
+      default_notice_minutes_blue: 0,
       zone_notice_defaults: {
         OPEN_NOTICE: state.defaultNoticeMinutesGreen,
-        OPEN_APPROVAL: state.defaultNoticeMinutesBlue,
+        OPEN_APPROVAL: 0,
+      },
+      tune_boundaries: {
+        red_blue_left: b1 * SLOT_MINUTES,
+        blue_green_left: b2 * SLOT_MINUTES,
+        green_blue_right: b3 * SLOT_MINUTES,
+        blue_red_right: b4 * SLOT_MINUTES,
       },
       owner: state.owner
         ? {
@@ -423,6 +697,7 @@
     els.scheduleVersion.textContent = state.version || "draft";
     els.timezoneValue.textContent = state.timezone || DEFAULT_TIMEZONE;
     syncSettingsInputsFromState();
+    renderTuneScopeControls();
     renderTabPanels();
     renderTimeline();
     renderSegments();
@@ -452,12 +727,13 @@
       div.title = `${slotToTime(slot)}-${slotToTime(slot + 1)} | ${ZONES[slotMap[slot].zone].label}`;
       els.timelineGrid.appendChild(div);
     }
+    renderTuneBoundaries();
   }
 
   function getZoneNoticeDefaults() {
     return {
       OPEN_NOTICE: clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90),
-      OPEN_APPROVAL: clampInt(state.defaultNoticeMinutesBlue, 0, 24 * 60, 30),
+      OPEN_APPROVAL: 0,
     };
   }
 
@@ -957,12 +1233,21 @@
   }
 
   function toggleModeFields() {
-    const isOverride = state.mode === "override";
-    els.dateFieldWrap.hidden = !isOverride;
-    els.weekdayFieldWrap.hidden = isOverride;
+    const modeField = els.modeSelect.closest(".field");
+    if (modeField) modeField.hidden = true;
+    if (state.tuneScope !== "specific") {
+      els.dateFieldWrap.hidden = true;
+      els.weekdayFieldWrap.hidden = true;
+      return;
+    }
+    els.dateFieldWrap.hidden = false;
+    els.weekdayFieldWrap.hidden = true;
   }
 
   function scheduleKey() {
+    if (isGroupTuneScope()) {
+      return tuneScopeLocalKey();
+    }
     return localKeyFor(state.mode, state.date, state.weekday);
   }
 
@@ -1117,13 +1402,14 @@
 
   function demoSegments(defaults) {
     const green = clampInt(Number(defaults && defaults.green), 0, 24 * 60, 90);
-    const blue = clampInt(Number(defaults && defaults.blue), 0, 24 * 60, 30);
+    const blue = 0;
     return canonicalizeSegments(
       [
-        { zone: "CLOSED", startSlot: 0, endSlot: minsToSlot(10 * 60), noticeMinutes: 0 },
+        { zone: "CLOSED", startSlot: 0, endSlot: minsToSlot(9 * 60), noticeMinutes: 0 },
+        { zone: "OPEN_APPROVAL", startSlot: minsToSlot(9 * 60), endSlot: minsToSlot(10 * 60), noticeMinutes: blue },
         { zone: "OPEN_NOTICE", startSlot: minsToSlot(10 * 60), endSlot: minsToSlot(18 * 60), noticeMinutes: green },
-        { zone: "OPEN_APPROVAL", startSlot: minsToSlot(18 * 60), endSlot: minsToSlot(20 * 60), noticeMinutes: blue },
-        { zone: "CLOSED", startSlot: minsToSlot(20 * 60), endSlot: SLOTS_PER_DAY, noticeMinutes: 0 },
+        { zone: "OPEN_APPROVAL", startSlot: minsToSlot(18 * 60), endSlot: minsToSlot(19 * 60), noticeMinutes: blue },
+        { zone: "CLOSED", startSlot: minsToSlot(19 * 60), endSlot: SLOTS_PER_DAY, noticeMinutes: 0 },
       ],
       { OPEN_NOTICE: green, OPEN_APPROVAL: blue }
     );

@@ -37,43 +37,66 @@
 
     <main class="tab-panels">
     <section class="panel controls" data-tab-panel="tune">
-      <div class="control-grid">
-        <div class="field">
-          <label for="modeSelect">Режим</label>
-          <select id="modeSelect">
-            <option value="override">Конкретная дата</option>
-            <option value="template">Шаблон по дню недели</option>
-          </select>
+      <div class="tune-simple-top">
+        <div class="tune-scope-switch" role="tablist" aria-label="Тип расписания">
+          <button type="button" id="btnTuneWeekdays" class="scope-btn is-active" role="tab" aria-selected="true">Будни</button>
+          <button type="button" id="btnTuneWeekends" class="scope-btn" role="tab" aria-selected="false">Выходные</button>
+          <button type="button" id="btnTuneSpecific" class="scope-btn ghost" role="tab" aria-selected="false">Специфика</button>
         </div>
-        <div class="field" id="dateFieldWrap">
-          <label for="dateInput">Дата</label>
-          <input id="dateInput" type="date">
+        <div class="tune-inline-field">
+          <label for="simpleGreenNoticeInput">Зелёная зона: предупредить за N минут</label>
+          <input id="simpleGreenNoticeInput" type="number" min="0" step="5" value="90">
         </div>
-        <div class="field" id="weekdayFieldWrap" hidden>
-          <label for="weekdaySelect">День недели</label>
-          <select id="weekdaySelect">
-            <option value="1">Понедельник</option>
-            <option value="2">Вторник</option>
-            <option value="3">Среда</option>
-            <option value="4">Четверг</option>
-            <option value="5">Пятница</option>
-            <option value="6">Суббота</option>
-            <option value="0">Воскресенье</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Настройки зон</label>
-          <button type="button" id="btnOpenSettings">Открыть настройки</button>
+        <div class="tune-top-actions">
+          <button type="button" class="ghost" id="btnOpenSettings">Настройки</button>
+          <button type="button" class="ghost" id="btnToggleTuneAdvanced">Показать специфику</button>
+          <button type="button" class="accent" id="btnSaveSimple">Сохранить</button>
         </div>
       </div>
-      <div class="quick-buttons">
-        <button type="button" class="ghost" id="btnToday">Сегодня</button>
-        <button type="button" class="ghost" id="btnTomorrow">Завтра</button>
-        <button type="button" class="ghost" id="btnCopyPrev">Скопировать вчера</button>
-        <button type="button" class="ghost" id="btnNormalize">Нормализовать</button>
-        <button type="button" id="btnAddSegment">Добавить сегмент</button>
-        <button type="button" class="accent" id="btnSave">Сохранить</button>
+
+      <div id="tuneScopeHint" class="tune-scope-hint muted">
+        Общий шаблон для будних дней. Конкретные даты настраиваются отдельно через «Специфика».
       </div>
+
+      <section id="tuneAdvancedPanel" class="tune-advanced-panel" hidden>
+        <div class="control-grid">
+          <div class="field">
+            <label for="modeSelect">Режим</label>
+            <select id="modeSelect">
+              <option value="override">Конкретная дата</option>
+              <option value="template">Шаблон по дню недели</option>
+            </select>
+          </div>
+          <div class="field" id="dateFieldWrap">
+            <label for="dateInput">Дата</label>
+            <input id="dateInput" type="date">
+          </div>
+          <div class="field" id="weekdayFieldWrap" hidden>
+            <label for="weekdaySelect">День недели</label>
+            <select id="weekdaySelect">
+              <option value="1">Понедельник</option>
+              <option value="2">Вторник</option>
+              <option value="3">Среда</option>
+              <option value="4">Четверг</option>
+              <option value="5">Пятница</option>
+              <option value="6">Суббота</option>
+              <option value="0">Воскресенье</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Быстрые действия</label>
+            <button type="button" id="btnTuneAdvancedClose">Скрыть специфику</button>
+          </div>
+        </div>
+        <div class="quick-buttons">
+          <button type="button" class="ghost" id="btnToday">Сегодня</button>
+          <button type="button" class="ghost" id="btnTomorrow">Завтра</button>
+          <button type="button" class="ghost" id="btnCopyPrev">Скопировать вчера</button>
+          <button type="button" class="ghost" id="btnNormalize">Нормализовать</button>
+          <button type="button" id="btnAddSegment">Добавить сегмент</button>
+          <button type="button" class="accent" id="btnSave">Сохранить (специфика)</button>
+        </div>
+      </section>
     </section>
 
     <section class="panel timeline-panel" data-tab-panel="tune">
@@ -86,15 +109,22 @@
         </div>
       </div>
       <div class="hour-axis" id="hourAxis"></div>
-      <div class="timeline-grid-wrap">
+      <div class="timeline-grid-wrap tune-simple-grid-wrap">
         <div class="timeline-grid" id="timelineGrid" aria-label="Timeline 24h"></div>
+        <div class="timeline-boundary-overlay" id="timelineBoundaryOverlay" aria-label="Границы зон">
+          <input type="range" id="boundary1Range" min="0" max="96" step="1" aria-label="Граница красная/синяя слева">
+          <input type="range" id="boundary2Range" min="0" max="96" step="1" aria-label="Граница синяя/зелёная слева">
+          <input type="range" id="boundary3Range" min="0" max="96" step="1" aria-label="Граница зелёная/синяя справа">
+          <input type="range" id="boundary4Range" min="0" max="96" step="1" aria-label="Граница синяя/красная справа">
+        </div>
       </div>
+      <div class="boundary-summary" id="boundarySummary"></div>
       <div class="timeline-help">
-        Нажми на сегмент в списке ниже и настрой границы ползунками. Шаг: 15 минут.
+        Двигай ползунки прямо на линии. Порядок зон фиксированный: красный → синий → зелёный → синий → красный. Синий можно убрать, сдвинув границы в одну точку.
       </div>
     </section>
 
-    <section class="panel" data-tab-panel="tune">
+    <section class="panel" data-tab-panel="tune" data-tune-legacy="true">
       <div class="section-head">
         <h2>Сегменты</h2>
         <span class="muted">Редактор интервалов</span>
@@ -102,7 +132,7 @@
       <div id="segmentsList" class="segments-list"></div>
     </section>
 
-    <section class="panel split" data-tab-panel="tune">
+    <section class="panel split" data-tab-panel="tune" data-tune-legacy="true">
       <div>
         <div class="section-head">
           <h2>Итоговая структура</h2>
@@ -231,12 +261,12 @@
           <label for="defaultNoticeInput">Зеленая зона: предупредить за N минут (глобально)</label>
           <input id="defaultNoticeInput" type="number" min="0" step="5" value="90">
         </div>
-        <div class="field">
+        <div class="field" hidden>
           <label for="defaultBlueNoticeInput">Синяя зона: предупредить за N минут (глобально)</label>
           <input id="defaultBlueNoticeInput" type="number" min="0" step="5" value="30">
         </div>
         <p class="muted">
-          Эти значения применяются глобально ко всем сегментам зеленой и синей зоны в текущем дне/шаблоне.
+          Для Коли оставляем только значение N для зелёной зоны. Синяя зона без N.
         </p>
       </div>
       <div class="modal-foot">
