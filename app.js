@@ -614,7 +614,11 @@
       const dateMain = document.createElement("div");
       dateMain.className = "main";
       dateMain.textContent = row.dateLabel;
+      const dateSub = document.createElement("div");
+      dateSub.className = "sub";
+      dateSub.textContent = row.weekdayLabel || "";
       dateBox.appendChild(dateMain);
+      dateBox.appendChild(dateSub);
 
       const mini = document.createElement("div");
       mini.className = "tune-calendar-mini";
@@ -686,7 +690,8 @@
       isDayOff: !!source.isDayOff,
       gradient,
       dayLabel: isoDate,
-      dateLabel: `${dateShort} ${weekday2}`,
+      dateLabel: dateShort,
+      weekdayLabel: weekday2,
       tag,
     };
   }
