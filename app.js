@@ -72,6 +72,8 @@
     weekdayFieldWrap: byId("weekdayFieldWrap"),
     btnOpenSettings: byId("btnOpenSettings"),
     btnOpenAdvancedMini: byId("btnOpenAdvancedMini"),
+    btnRevertUnsaved: byId("btnRevertUnsaved"),
+    btnResetPreviewDefault: byId("btnResetPreviewDefault"),
     defaultNoticeInput: byId("defaultNoticeInput"),
     defaultBlueNoticeInput: byIdOptional("defaultBlueNoticeInput"),
     settingsModal: byId("settingsModal"),
@@ -187,6 +189,18 @@
       state.tuneAdvancedOpen = !state.tuneAdvancedOpen;
       renderAll();
     });
+
+    if (els.btnRevertUnsaved) {
+      els.btnRevertUnsaved.addEventListener("click", async () => {
+        await revertUnsavedTuneChanges();
+      });
+    }
+
+    if (els.btnResetPreviewDefault) {
+      els.btnResetPreviewDefault.addEventListener("click", () => {
+        resetTunePreviewToDefault();
+      });
+    }
 
     els.btnTuneAdvancedClose.addEventListener("click", () => {
       state.tuneAdvancedOpen = false;
@@ -436,6 +450,28 @@
       state.tuneAdvancedOpen = false;
       state.calendarOpen = true;
     }
+  }
+
+  async function revertUnsavedTuneChanges() {
+    logEvent("Возврат к последней сохранённой версии (без сохранения текущих правок).");
+    try {
+      await loadSchedule();
+    } catch (err) {
+      logEvent(`Не удалось вернуть сохранённую версию: ${safeErr(err)}`);
+    }
+  }
+
+  function resetTunePreviewToDefault() {
+    state.dayOff = false;
+    state.segments = demoSegments({
+      green: clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90),
+      blue: 0,
+    });
+    applyGlobalZoneNoticesToSegments();
+    syncTuneBoundariesFromSegments();
+    state.source = state.lastLoadedFrom || state.source || "local";
+    logEvent("Таймлайн сброшен к дефолтному шаблону (без сохранения).");
+    renderAll();
   }
 
   function isRecentlySavedMarkerForDate(isoDate) {

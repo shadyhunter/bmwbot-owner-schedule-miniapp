@@ -250,6 +250,12 @@ button.accent {
   border-color: color-mix(in srgb, var(--accent) 75%, black);
 }
 
+button.danger-solid {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--danger) 82%, white), color-mix(in srgb, var(--danger) 92%, black));
+  color: white;
+  border-color: color-mix(in srgb, var(--danger) 72%, black);
+}
+
 button.is-saving {
   position: relative;
   pointer-events: none;
@@ -396,7 +402,7 @@ button.danger {
 }
 
 .tune-advanced-mini {
-  margin-left: auto;
+  margin-left: 0;
   min-width: 30px;
   width: 30px;
   height: 30px;
@@ -408,6 +414,31 @@ button.danger {
   font-size: 15px;
   line-height: 1;
   opacity: 0.7;
+}
+
+.tune-mini-icon {
+  min-width: 30px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tune-reset-mini {
+  margin-left: auto;
+  color: color-mix(in srgb, var(--danger) 82%, white);
+  border-color: color-mix(in srgb, var(--danger) 22%, var(--line));
+  opacity: 0.9;
+}
+
+.tune-reset-mini:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
 }
 
 .tune-advanced-mini:hover {
@@ -505,10 +536,11 @@ button.danger {
   justify-self: center;
   min-width: 22px;
   text-align: center;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.1;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.92);
+  transform: translateX(2px);
 }
 
 .tune-calendar-mini {
@@ -1303,6 +1335,10 @@ input[type="range"] {
     flex: 1 1 100%;
   }
 
+  .tune-top-actions button.tune-mini-icon {
+    flex: 0 0 auto;
+  }
+
   .tune-calendar-head {
     flex-direction: column;
     align-items: flex-start;
@@ -1330,6 +1366,7 @@ input[type="range"] {
     display: block;
     justify-self: center;
     text-align: center;
+    transform: translateX(1px);
   }
 
   .tune-calendar-tag {
