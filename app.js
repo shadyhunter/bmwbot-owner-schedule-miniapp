@@ -662,7 +662,7 @@
     let ok = 0;
     let failed = 0;
     const failedDates = [];
-    setCalendarRowsPending(dates, true);
+    const jobs = [];
 
     logEvent("Reset default: applying weekday/weekend templates to next 14 days...");
     for (const isoDate of dates) {
@@ -681,6 +681,21 @@
         );
         overridePayload.day_off = false;
         overridePayload.day_status = "work";
+        jobs.push({ isoDate, overridePayload });
+      } catch (err) {
+        failed += 1;
+        failedDates.push(isoDate);
+        logEvent(`Reset default failed for ${isoDate}: ${safeErr(err)}`);
+      }
+    }
+    if (jobs.length) {
+      setCalendarRowsPendingExpected(jobs.map(({ isoDate, overridePayload }) => ({
+        isoDate,
+        expectedVersion: String(overridePayload.version || ""),
+      })));
+    }
+    for (const { isoDate, overridePayload } of jobs) {
+      try {
         await persistOverridePayloadForDate(overridePayload);
         ok += 1;
       } catch (err) {
