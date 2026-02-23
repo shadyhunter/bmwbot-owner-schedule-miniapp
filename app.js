@@ -240,7 +240,7 @@
 
     [els.boundary1Range, els.boundary2Range, els.boundary3Range, els.boundary4Range].forEach((input, idx) => {
       input.addEventListener("input", () => {
-        setTuneBoundary(idx, Number(input.value));
+        setTuneBoundary(idx, TIMELINE_VISIBLE_START_SLOT + Number(input.value));
       });
     });
 
@@ -710,13 +710,13 @@
 
     [els.boundary1Range, els.boundary2Range, els.boundary3Range, els.boundary4Range].forEach((input) => {
       if (!input) return;
-      input.min = String(TIMELINE_VISIBLE_START_SLOT);
-      input.max = String(SLOTS_PER_DAY);
+      input.min = "0";
+      input.max = String(TIMELINE_VISIBLE_SLOT_COUNT);
     });
-    els.boundary1Range.value = String(vb1);
-    els.boundary2Range.value = String(vb2);
-    els.boundary3Range.value = String(vb3);
-    els.boundary4Range.value = String(vb4);
+    els.boundary1Range.value = String(vb1 - TIMELINE_VISIBLE_START_SLOT);
+    els.boundary2Range.value = String(vb2 - TIMELINE_VISIBLE_START_SLOT);
+    els.boundary3Range.value = String(vb3 - TIMELINE_VISIBLE_START_SLOT);
+    els.boundary4Range.value = String(vb4 - TIMELINE_VISIBLE_START_SLOT);
     if (els.boundarySummary) {
       els.boundarySummary.innerHTML = "";
     }
