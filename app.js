@@ -762,6 +762,39 @@
     return false;
   }
 
+  function payloadData(payload) {
+    if (!payload || typeof payload !== "object") return null;
+    return payload.data || payload;
+  }
+
+  function payloadVersion(payload) {
+    const data = payloadData(payload);
+    return data && typeof data.version === "string" ? data.version : "";
+  }
+
+  function payloadSource(payload) {
+    const data = payloadData(payload);
+    return data && typeof data.source === "string" ? String(data.source) : "";
+  }
+
+  function shouldPreferLocalSpecificOverride(localPayload, remotePayload) {
+    if (!(state.tuneScope === "specific" && state.mode === "override")) return false;
+    if (!localPayload || !remotePayload) return false;
+
+    const remoteSource = payloadSource(remotePayload).toLowerCase();
+    if (remoteSource && remoteSource !== "override") {
+      return true;
+    }
+
+    const localVer = payloadVersion(localPayload);
+    const remoteVer = payloadVersion(remotePayload);
+    if (localVer && remoteVer && localVer > remoteVer) {
+      return true;
+    }
+
+    return false;
+  }
+
   function previewSegmentsFromPayload(payload) {
     if (!payload || typeof payload !== "object") return null;
     const data = payload.data || payload;
@@ -1001,6 +1034,13 @@
     }
 
     if (isStaleScheduleLoad(requestId, requestCtx)) return;
+
+    if (loaded && preloadedLocal && shouldPreferLocalSpecificOverride(preloadedLocal, loaded)) {
+      loaded = preloadedLocal;
+      state.source = "local";
+      state.lastLoadedFrom = "local";
+      logEvent("Оставлена локальная версия даты (API вернул не-override или более старую версию).");
+    }
 
     if (!loaded) {
       loaded = preloadedLocal || loadLocal(key);
