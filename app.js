@@ -980,8 +980,7 @@
     const isLoading = isCalendarRowPending(isoDate)
       || (
         !!state.calendarBackendLoading
-        && hasAnyCalendarPendingRows()
-        && source.sourceKind === "override"
+        && !!state.startupHydrating
       );
     const gradient = buildMiniTimelineGradient(source.segments);
     const d = new Date(`${isoDate}T12:00:00`);
