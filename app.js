@@ -374,6 +374,10 @@
     els.btnToggleTuneAdvanced.textContent = state.calendarOpen ? "Скрыть календарь" : "Календарь";
     els.btnOpenAdvancedMini.hidden = state.tuneScope !== "specific";
     els.btnOpenAdvancedMini.classList.toggle("is-active", state.tuneAdvancedOpen && state.tuneScope === "specific");
+    if (els.btnResetPreviewDefault) {
+      els.btnResetPreviewDefault.hidden = true;
+      els.btnResetPreviewDefault.disabled = true;
+    }
     if (els.timelineDayModeToggle) {
       const showDayMode = state.tuneScope === "specific";
       els.timelineDayModeToggle.hidden = !showDayMode;
@@ -790,17 +794,9 @@
     state.date = isoDate;
     state.mode = "override";
     state.tuneAdvancedOpen = false;
-    state.calendarOpen = false;
+    state.calendarOpen = true;
     hydrateControlsFromState();
     await setTuneScope("specific", { keepAdvancedState: true, forceReload: true });
-    const timelinePanel = document.querySelector(".timeline-panel");
-    if (timelinePanel && typeof timelinePanel.scrollIntoView === "function") {
-      try {
-        timelinePanel.scrollIntoView({ behavior: "smooth", block: "start" });
-      } catch {
-        timelinePanel.scrollIntoView();
-      }
-    }
   }
 
   function buildTuneCalendarRowData(isoDate) {
@@ -832,6 +828,18 @@
   }
 
   function resolveTuneCalendarRowSource(isoDate) {
+    if (
+      state.tuneScope === "specific"
+      && state.date === isoDate
+      && !(state.mode === "override" && state.scheduleLoading)
+    ) {
+      return {
+        sourceKind: "override",
+        segments: state.segments.slice(),
+        isDayOff: !!state.dayOff,
+      };
+    }
+
     const overridePayload = loadLocal(localKeyFor("override", isoDate, null));
     const overrideSegments = previewSegmentsFromPayload(overridePayload);
     if (overrideSegments) {
@@ -839,14 +847,6 @@
         sourceKind: "override",
         segments: overrideSegments,
         isDayOff: readDayOffFromPayload(overridePayload),
-      };
-    }
-
-    if (state.tuneScope === "specific" && state.date === isoDate) {
-      return {
-        sourceKind: "override",
-        segments: state.segments.slice(),
-        isDayOff: !!state.dayOff,
       };
     }
 
