@@ -1763,16 +1763,22 @@
     syncTuneBoundariesFromSegments();
     const payload = buildPayload();
     if (isGroupTuneScope()) {
+      const previousGroupTemplatePayload = loadLocal(groupLocalKeyFor(state.tuneScope));
+      const previousGroupTemplateComparable = extractComparableScheduleState(previousGroupTemplatePayload);
       persistLocalMirrorAndVerify(payload);
       await saveBackendTemplateMirrorForGroupPayload(payload, state.tuneScope);
-      const propagated = await propagateGroupTemplateToUpcomingDates(payload, state.tuneScope);
+      const propagated = await propagateGroupTemplateToUpcomingDates(payload, state.tuneScope, {
+        preserveCustom: true,
+        previousTemplateComparable: previousGroupTemplateComparable,
+      });
       state.source = "local";
       state.version = payload.version;
       state.lastLoadedFrom = "local";
       markScheduleSaved();
       applyPostSuccessfulSaveUi();
       if (propagated && propagated.total > 0) {
-        logEvent(`Template propagated to next 14 days: ${propagated.ok}/${propagated.total}.`);
+        const skippedInfo = propagated.skipped ? `, skipped=${propagated.skipped}` : "";
+        logEvent(`Template propagated to next 14 days: ${propagated.ok}/${propagated.total}${skippedInfo}.`);
       }
       logEvent(`Сохранено локально (${state.tuneScope === "weekdays" ? "будни" : "выходные"}).`);
       finishSaveButtonFx(true);
@@ -1936,17 +1942,24 @@
     }
   }
 
-  async function propagateGroupTemplateToUpcomingDates(templatePayload, scope) {
+  async function propagateGroupTemplateToUpcomingDates(templatePayload, scope, options = {}) {
     if (!templatePayload || !(scope === "weekdays" || scope === "weekends")) {
-      return { total: 0, ok: 0, failed: 0 };
+      return { total: 0, ok: 0, failed: 0, skipped: 0 };
     }
+    const preserveCustom = !!options.preserveCustom;
+    const previousTemplateComparable = options.previousTemplateComparable || null;
     const dates = upcomingCalendarDates(14).filter((isoDate) => {
       const weekend = isWeekendIsoDate(isoDate);
       return scope === "weekends" ? weekend : !weekend;
     });
-    const jobs = dates.map((isoDate) => {
+    const skippedDates = [];
+    const jobs = dates.flatMap((isoDate) => {
+      if (preserveCustom && shouldSkipTemplatePropagationForDate(isoDate, previousTemplateComparable)) {
+        skippedDates.push(isoDate);
+        return [];
+      }
       const overridePayload = buildOverridePayloadFromTemplatePayload(templatePayload, isoDate, scope);
-      return { isoDate, overridePayload };
+      return [{ isoDate, overridePayload }];
     });
     setCalendarRowsPendingExpected(jobs.map(({ isoDate, overridePayload }) => ({
       isoDate,
@@ -1968,7 +1981,7 @@
         return;
       }
       failed += 1;
-      const isoDate = dates[idx];
+      const isoDate = jobs[idx] && jobs[idx].isoDate ? jobs[idx].isoDate : dates[idx];
       failedDates.push(isoDate);
       logEvent(`Template propagation failed for ${isoDate}: ${safeErr(res.reason)}`);
     });
@@ -1976,7 +1989,30 @@
       setCalendarRowsPending(failedDates, false);
     }
 
-    return { total: dates.length, ok, failed, dates };
+    return { total: dates.length, ok, failed, skipped: skippedDates.length, dates, skippedDates };
+  }
+
+  function shouldSkipTemplatePropagationForDate(isoDate, previousTemplateComparable) {
+    if (!isoDate || !previousTemplateComparable) return false;
+
+    const backendRow = getCalendarBackendRow(isoDate);
+    if (backendRow) {
+      if (backendRow.isDayOff) return true;
+      if (backendRow.sourceKind !== "override") return false;
+      if (backendRow.comparable && areComparableSchedulesEqual(backendRow.comparable, previousTemplateComparable)) {
+        return false;
+      }
+      return true;
+    }
+
+    const localOverridePayload = loadLocal(localKeyFor("override", isoDate, null));
+    if (!localOverridePayload) return false;
+    if (readDayOffFromPayload(localOverridePayload)) return true;
+    const localComparable = extractComparableScheduleState(localOverridePayload);
+    if (localComparable && areComparableSchedulesEqual(localComparable, previousTemplateComparable)) {
+      return false;
+    }
+    return true;
   }
 
   function buildPayload() {
