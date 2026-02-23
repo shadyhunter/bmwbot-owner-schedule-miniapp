@@ -39,6 +39,7 @@
     source: "local",
     segments: demoSegments({ green: 90, blue: 0 }),
     tuneBoundaries: [minsToSlot(9 * 60), minsToSlot(10 * 60), minsToSlot(18 * 60), minsToSlot(19 * 60)],
+    dayOff: false,
     owner: null,
     lastLoadedFrom: "local",
     lastSchedulePayload: null,
@@ -84,7 +85,11 @@
     btnAddSegment: byId("btnAddSegment"),
     btnSave: byId("btnSave"),
     tuneTimelineTitle: byId("tuneTimelineTitle"),
+    timelineDayModeToggle: byId("timelineDayModeToggle"),
+    btnDayModeWork: byId("btnDayModeWork"),
+    btnDayModeOff: byId("btnDayModeOff"),
     hourAxis: byId("hourAxis"),
+    timelineGridWrap: byId("timelineGridWrap"),
     timelineGrid: byId("timelineGrid"),
     timelineBoundaryOverlay: byId("timelineBoundaryOverlay"),
     boundary1Range: byId("boundary1Range"),
@@ -185,6 +190,22 @@
 
     els.btnTuneAdvancedClose.addEventListener("click", () => {
       state.tuneAdvancedOpen = false;
+      renderAll();
+    });
+
+    els.btnDayModeWork.addEventListener("click", () => {
+      if (state.tuneScope !== "specific") return;
+      if (!state.dayOff) return;
+      state.dayOff = false;
+      logEvent("Режим дня: рабочий.");
+      renderAll();
+    });
+
+    els.btnDayModeOff.addEventListener("click", () => {
+      if (state.tuneScope !== "specific") return;
+      if (state.dayOff) return;
+      state.dayOff = true;
+      logEvent("Режим дня: выходной (override).");
       renderAll();
     });
 
@@ -337,6 +358,14 @@
     els.btnToggleTuneAdvanced.textContent = state.calendarOpen ? "Скрыть календарь" : "Календарь";
     els.btnOpenAdvancedMini.hidden = state.tuneScope !== "specific";
     els.btnOpenAdvancedMini.classList.toggle("is-active", state.tuneAdvancedOpen && state.tuneScope === "specific");
+    if (els.timelineDayModeToggle) {
+      const showDayMode = state.tuneScope === "specific";
+      els.timelineDayModeToggle.hidden = !showDayMode;
+      els.btnDayModeWork.classList.toggle("is-active", showDayMode && !state.dayOff);
+      els.btnDayModeOff.classList.toggle("is-active", showDayMode && !!state.dayOff);
+      els.btnDayModeWork.setAttribute("aria-pressed", showDayMode && !state.dayOff ? "true" : "false");
+      els.btnDayModeOff.setAttribute("aria-pressed", showDayMode && !!state.dayOff ? "true" : "false");
+    }
 
     toggleModeFields();
   }
@@ -596,12 +625,14 @@
       const miniTrack = document.createElement("div");
       miniTrack.className = "tune-calendar-mini-track";
       miniTrack.style.background = row.gradient;
+      if (row.isDayOff) miniTrack.classList.add("is-day-off");
       mini.appendChild(miniTrack);
 
       const tag = document.createElement("div");
       tag.className = "tune-calendar-tag";
       if (row.sourceKind === "override") tag.classList.add("is-override");
       if (row.isActive) tag.classList.add("is-active");
+      if (row.isDayOff) tag.classList.add("is-day-off");
       tag.textContent = row.tag;
 
       btn.appendChild(dateBox);
@@ -646,12 +677,14 @@
     const dateLabel = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
     let tag = source.sourceKind === "override" ? "дата" : (isWeekend ? "выходные" : "будни");
-    if (isActive) tag = "открыта";
+    if (source.isDayOff) tag = "выходной";
+    if (isActive && !source.isDayOff) tag = "открыта";
     if (isRecentlySavedMarkerForDate(isoDate)) tag = "сохранено";
     return {
       isoDate,
       isActive,
       sourceKind: source.sourceKind,
+      isDayOff: !!source.isDayOff,
       gradient,
       dayLabel: `${weekdayShort} • ${isoDate}`,
       dateLabel,
@@ -663,11 +696,19 @@
     const overridePayload = loadLocal(localKeyFor("override", isoDate, null));
     const overrideSegments = previewSegmentsFromPayload(overridePayload);
     if (overrideSegments) {
-      return { sourceKind: "override", segments: overrideSegments };
+      return {
+        sourceKind: "override",
+        segments: overrideSegments,
+        isDayOff: readDayOffFromPayload(overridePayload),
+      };
     }
 
     if (state.tuneScope === "specific" && state.date === isoDate) {
-      return { sourceKind: "override", segments: state.segments.slice() };
+      return {
+        sourceKind: "override",
+        segments: state.segments.slice(),
+        isDayOff: !!state.dayOff,
+      };
     }
 
     const d = new Date(`${isoDate}T12:00:00`);
@@ -675,13 +716,50 @@
     const groupPayload = loadLocal(groupLocalKeyFor(weekend ? "weekends" : "weekdays"));
     const groupSegments = previewSegmentsFromPayload(groupPayload);
     if (groupSegments) {
-      return { sourceKind: weekend ? "group-weekends" : "group-weekdays", segments: groupSegments };
+      return {
+        sourceKind: weekend ? "group-weekends" : "group-weekdays",
+        segments: groupSegments,
+        isDayOff: false,
+      };
     }
 
     return {
       sourceKind: "demo",
       segments: demoSegments({ green: state.defaultNoticeMinutesGreen, blue: 0 }),
+      isDayOff: false,
     };
+  }
+
+  function readDayOffFromPayload(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    const data = payload.data || payload;
+    if (typeof data.day_off === "boolean") return data.day_off;
+    if (typeof data.day_disabled === "boolean") return data.day_disabled;
+    if (typeof data.day_status === "string") {
+      return String(data.day_status).toLowerCase() === "off";
+    }
+    return false;
+  }
+
+  function hasExplicitDayOffField(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    const data = payload.data || payload;
+    return typeof data.day_off === "boolean"
+      || typeof data.day_disabled === "boolean"
+      || typeof data.day_status === "string";
+  }
+
+  function resolveDayOffForLoadedSchedule(payload) {
+    if (hasExplicitDayOffField(payload)) {
+      return readDayOffFromPayload(payload);
+    }
+    if (state.tuneScope === "specific" && state.mode === "override") {
+      const localMirror = loadLocal(scheduleKey());
+      if (hasExplicitDayOffField(localMirror)) {
+        return readDayOffFromPayload(localMirror);
+      }
+    }
+    return false;
   }
 
   function previewSegmentsFromPayload(payload) {
@@ -875,6 +953,7 @@
       state.lastLoadedFrom = "local";
       if (!loadedGroup) {
         state.version = null;
+        state.dayOff = false;
         state.segments = demoSegments({
           green: state.defaultNoticeMinutesGreen,
           blue: 0,
@@ -931,6 +1010,7 @@
 
     if (!loaded) {
       state.version = null;
+      state.dayOff = false;
       state.segments = demoSegments({
         green: state.defaultNoticeMinutesGreen,
         blue: 0,
@@ -970,6 +1050,7 @@
       }
     }
     state.defaultNoticeMinutesBlue = 0;
+    state.dayOff = resolveDayOffForLoadedSchedule(payload);
     syncSettingsInputsFromState();
     const incoming = Array.isArray(data.segments) ? data.segments : [];
     const parsed = incoming.map(toSlotSegment).filter(Boolean);
@@ -1070,6 +1151,8 @@
         green_blue_right: b3 * SLOT_MINUTES,
         blue_red_right: b4 * SLOT_MINUTES,
       },
+      day_off: state.tuneScope === "specific" ? !!state.dayOff : false,
+      day_status: state.tuneScope === "specific" ? (state.dayOff ? "off" : "work") : null,
       owner: state.owner
         ? {
             id: state.owner.id,
@@ -1129,6 +1212,10 @@
       }
     }
     const slotMap = expandToSlots(state.segments, getZoneNoticeDefaults());
+    const visualDayOff = state.tuneScope === "specific" && !!state.dayOff;
+    if (els.timelineGridWrap) els.timelineGridWrap.classList.toggle("is-day-off", visualDayOff);
+    els.timelineGrid.classList.toggle("is-day-off", visualDayOff);
+    els.timelineBoundaryOverlay.classList.toggle("is-day-off", visualDayOff);
     els.timelineGrid.innerHTML = "";
     for (let slot = 0; slot < SLOTS_PER_DAY; slot += 1) {
       const div = document.createElement("div");

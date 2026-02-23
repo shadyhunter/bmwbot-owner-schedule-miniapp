@@ -514,6 +514,11 @@ button.danger {
   border-radius: 999px;
 }
 
+.tune-calendar-mini-track.is-day-off {
+  filter: saturate(0.25) brightness(0.85);
+  opacity: 0.95;
+}
+
 .tune-calendar-tag {
   font-size: 10px;
   line-height: 1;
@@ -533,6 +538,12 @@ button.danger {
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.tune-calendar-tag.is-day-off {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--zone-closed) 35%, var(--line));
+  background: color-mix(in srgb, var(--line) 45%, transparent);
 }
 
 .tune-advanced-panel {
@@ -559,10 +570,54 @@ button.danger {
   margin-bottom: 10px;
 }
 
+.timeline-head-main {
+  display: grid;
+  gap: 8px;
+  align-items: start;
+}
+
 .timeline-header h2,
 .section-head h2 {
   margin: 0;
   font-size: 1.05rem;
+}
+
+.timeline-day-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.timeline-day-mode-label {
+  font-size: 11px;
+  color: var(--muted);
+  padding-left: 6px;
+}
+
+.timeline-day-mode-switch {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.timeline-day-mode-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.timeline-day-mode-btn.is-active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent-2) 30%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
 }
 
 .legend {
@@ -623,6 +678,19 @@ button.danger {
   position: relative;
 }
 
+.tune-simple-grid-wrap.is-day-off::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 4px 0;
+  background: linear-gradient(
+    180deg,
+    rgba(128, 134, 142, 0.18) 0%,
+    rgba(128, 134, 142, 0.28) 100%
+  );
+  pointer-events: none;
+  border-radius: 10px;
+}
+
 .timeline-grid {
   display: grid;
   grid-template-columns: repeat(96, minmax(8px, 1fr));
@@ -632,6 +700,11 @@ button.danger {
   border-radius: 10px;
   border: 1px solid var(--line);
   overflow: hidden;
+  position: relative;
+}
+
+.timeline-grid.is-day-off {
+  filter: saturate(0.35) brightness(0.88);
 }
 
 .timeline-boundary-overlay {
@@ -644,6 +717,10 @@ button.danger {
   pointer-events: auto;
   touch-action: none;
   cursor: ew-resize;
+}
+
+.timeline-boundary-overlay.is-day-off {
+  opacity: 0.82;
 }
 
 .timeline-boundary-overlay input[type="range"] {
@@ -1253,6 +1330,19 @@ input[type="range"] {
     align-items: stretch;
   }
 
+  .timeline-head-main {
+    width: 100%;
+  }
+
+  .timeline-day-mode {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .timeline-day-mode-label {
+    padding-left: 4px;
+  }
+
   .legend {
     justify-content: flex-start;
   }
@@ -1348,6 +1438,19 @@ input[type="range"] {
 
   .timeline-slot {
     min-height: 32px;
+  }
+
+  .timeline-day-mode-label {
+    display: none;
+  }
+
+  .timeline-day-mode {
+    padding: 3px;
+  }
+
+  .timeline-day-mode-btn {
+    padding: 5px 8px;
+    font-size: 11px;
   }
 
   .timeline-boundary-overlay input[type="range"]::-webkit-slider-thumb {

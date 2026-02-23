@@ -109,7 +109,16 @@
 
     <section class="panel timeline-panel" data-tab-panel="tune">
       <div class="timeline-header">
-        <h2 id="tuneTimelineTitle">Таймлайн дня</h2>
+        <div class="timeline-head-main">
+          <h2 id="tuneTimelineTitle">Таймлайн дня</h2>
+          <div id="timelineDayModeToggle" class="timeline-day-mode" hidden>
+            <span class="timeline-day-mode-label">День</span>
+            <div class="timeline-day-mode-switch" role="group" aria-label="Режим дня">
+              <button type="button" id="btnDayModeWork" class="timeline-day-mode-btn is-active" aria-pressed="true">Рабочий</button>
+              <button type="button" id="btnDayModeOff" class="timeline-day-mode-btn" aria-pressed="false">Выходной</button>
+            </div>
+          </div>
+        </div>
         <div class="legend">
           <span class="legend-item"><i class="legend-chip zone-open-notice"></i>Зеленая зона (авто-подтверждение)</span>
           <span class="legend-item"><i class="legend-chip zone-closed"></i>Красная зона (закрыто)</span>
@@ -117,7 +126,7 @@
         </div>
       </div>
       <div class="hour-axis" id="hourAxis"></div>
-      <div class="timeline-grid-wrap tune-simple-grid-wrap">
+      <div class="timeline-grid-wrap tune-simple-grid-wrap" id="timelineGridWrap">
         <div class="timeline-grid" id="timelineGrid" aria-label="Timeline 24h"></div>
         <div class="timeline-boundary-overlay" id="timelineBoundaryOverlay" aria-label="Границы зон">
           <input type="range" id="boundary1Range" min="0" max="96" step="1" aria-label="Граница красная/синяя слева">
