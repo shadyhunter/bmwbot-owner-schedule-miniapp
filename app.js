@@ -1527,11 +1527,15 @@
     const payload = buildPayload();
     if (isGroupTuneScope()) {
       persistLocalMirrorAndVerify(payload);
+      const propagated = await propagateGroupTemplateToUpcomingDates(payload, state.tuneScope);
       state.source = "local";
       state.version = payload.version;
       state.lastLoadedFrom = "local";
       markScheduleSaved();
       applyPostSuccessfulSaveUi();
+      if (propagated && propagated.total > 0) {
+        logEvent(`Template propagated to next 14 days: ${propagated.ok}/${propagated.total}.`);
+      }
       logEvent(`Сохранено локально (${state.tuneScope === "weekdays" ? "будни" : "выходные"}).`);
       finishSaveButtonFx(true);
       renderAll();
@@ -1582,6 +1586,103 @@
       logEvent("Предупреждение: локальная проверка сохранения не прошла.");
     }
     return ok;
+  }
+
+  function upcomingCalendarDates(limit = 14) {
+    const out = [];
+    const n = clampInt(Number(limit), 1, 60, 14);
+    const start = todayISO();
+    for (let i = 0; i < n; i += 1) {
+      out.push(addDaysISO(start, i));
+    }
+    return out;
+  }
+
+  function isWeekendIsoDate(isoDate) {
+    const d = new Date(`${isoDate}T12:00:00`);
+    const day = d.getDay();
+    return day === 0 || day === 6;
+  }
+
+  function isoDateWeekdayNumber(isoDate) {
+    const d = new Date(`${isoDate}T12:00:00`);
+    const day = d.getDay();
+    return Number.isFinite(day) ? day : 0;
+  }
+
+  function buildOverridePayloadFromTemplatePayload(templatePayload, isoDate, scope) {
+    const src = templatePayload && typeof templatePayload === "object" ? templatePayload : {};
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.version = new Date().toISOString();
+    copy.mode = "override";
+    copy.tune_scope = "specific";
+    copy.date = isoDate;
+    copy.weekday = isoDateWeekdayNumber(isoDate);
+    copy.day_off = false;
+    copy.day_status = "work";
+    copy.default_notice_minutes_blue = 0;
+    if (!copy.zone_notice_defaults || typeof copy.zone_notice_defaults !== "object") {
+      copy.zone_notice_defaults = {};
+    }
+    copy.zone_notice_defaults.OPEN_APPROVAL = 0;
+    copy.zone_notice_defaults.OPEN_NOTICE = clampInt(
+      Number(copy.default_notice_minutes_green ?? copy.default_notice_minutes ?? 90),
+      0,
+      24 * 60,
+      90
+    );
+    if (!Array.isArray(copy.segments)) copy.segments = [];
+    copy.segments = copy.segments.map((s) => {
+      const zone = s && typeof s.zone === "string" ? s.zone : "CLOSED";
+      const seg = {
+        zone,
+        start_min: clampInt(Number(s?.start_min), 0, 1440, 0),
+        end_min: clampInt(Number(s?.end_min), 0, 1440, 0),
+        notice_minutes: s?.notice_minutes == null ? null : clampInt(Number(s.notice_minutes), 0, 1440, 0),
+      };
+      if (seg.end_min < seg.start_min) seg.end_min = seg.start_min;
+      if (zone !== "OPEN_NOTICE" && zone !== "OPEN_APPROVAL") seg.notice_minutes = null;
+      if (zone === "OPEN_APPROVAL") seg.notice_minutes = 0;
+      return seg;
+    });
+    copy.comment = `template-propagated:${scope}`;
+    return copy;
+  }
+
+  async function persistOverridePayloadForDate(payload) {
+    const apiBase = getApiBase();
+    if (apiBase) {
+      await fetchJson(`${apiBase.replace(/\/$/, "")}/schedule/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    saveLocal(localKeyFor("override", payload.date, null), payload);
+    return true;
+  }
+
+  async function propagateGroupTemplateToUpcomingDates(templatePayload, scope) {
+    if (!templatePayload || !(scope === "weekdays" || scope === "weekends")) {
+      return { total: 0, ok: 0, failed: 0 };
+    }
+    const dates = upcomingCalendarDates(14).filter((isoDate) => {
+      const weekend = isWeekendIsoDate(isoDate);
+      return scope === "weekends" ? weekend : !weekend;
+    });
+    let ok = 0;
+    let failed = 0;
+    for (const isoDate of dates) {
+      const overridePayload = buildOverridePayloadFromTemplatePayload(templatePayload, isoDate, scope);
+      try {
+        await persistOverridePayloadForDate(overridePayload);
+        ok += 1;
+      } catch (err) {
+        failed += 1;
+        logEvent(`Template propagation failed for ${isoDate}: ${safeErr(err)}`);
+      }
+    }
+    return { total: dates.length, ok, failed };
   }
 
   function buildPayload() {
