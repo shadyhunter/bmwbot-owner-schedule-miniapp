@@ -655,7 +655,7 @@
     state.date = isoDate;
     state.mode = "override";
     state.tuneAdvancedOpen = false;
-    state.calendarOpen = false;
+    state.calendarOpen = true;
     hydrateControlsFromState();
     await setTuneScope("specific", { keepAdvancedState: true, forceReload: true });
     const timelinePanel = document.querySelector(".timeline-panel");
