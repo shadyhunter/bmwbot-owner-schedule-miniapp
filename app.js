@@ -641,12 +641,15 @@
     const dates = upcomingCalendarDates(14);
     let ok = 0;
     let failed = 0;
+    const failedDates = [];
+    setCalendarRowsPending(dates, true);
 
     logEvent("Reset default: applying weekday/weekend templates to next 14 days...");
     for (const isoDate of dates) {
       const templateInfo = getGroupTemplateSnapshotForDate(isoDate);
       if (!templateInfo || !templateInfo.payload) {
         failed += 1;
+        failedDates.push(isoDate);
         logEvent(`Reset default skipped ${isoDate}: template payload not found.`);
         continue;
       }
@@ -662,8 +665,12 @@
         ok += 1;
       } catch (err) {
         failed += 1;
+        failedDates.push(isoDate);
         logEvent(`Reset default failed for ${isoDate}: ${safeErr(err)}`);
       }
+    }
+    if (failedDates.length) {
+      setCalendarRowsPending(failedDates, false);
     }
 
     state.tuneScope = "specific";
