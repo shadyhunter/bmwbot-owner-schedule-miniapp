@@ -149,7 +149,7 @@
 
   void init();
 
-  function init() {
+  async function init() {
     initTelegram();
     bindTabNavigation();
     bindControls();
@@ -165,6 +165,7 @@
       });
     }
     setTuneScope("weekdays", { skipLoad: true, keepAdvancedState: true });
+    await refreshGroupTemplateMirrorsFromBackend();
     void loadSchedule();
     void refreshCalendarBackendWindow({ force: true });
   }
@@ -2817,6 +2818,41 @@
       return "https://hellobimmer.com/webhook/bmwbot-owner-schedule";
     }
     return "";
+  }
+
+  async function refreshGroupTemplateMirrorsFromBackend() {
+    const apiBase = getApiBase();
+    if (!apiBase) return false;
+    const base = apiBase.replace(/\/$/, "");
+    const jobs = [
+      { scope: "weekdays", weekday: 1 },
+      { scope: "weekends", weekday: 6 },
+    ];
+    let updated = 0;
+
+    const results = await Promise.allSettled(
+      jobs.map(async ({ scope, weekday }) => {
+        const payload = await fetchJson(
+          `${base}/schedule?mode=template&weekday=${encodeURIComponent(weekday)}`,
+          { method: "GET" }
+        );
+        const data = payloadData(payload);
+        if (!data || typeof data !== "object") {
+          throw new Error(`empty template payload for ${scope}`);
+        }
+        // Store template mirror in the same shape as local group saves (plain payload object).
+        saveLocal(groupLocalKeyFor(scope), data);
+        return scope;
+      })
+    );
+
+    results.forEach((res) => {
+      if (res.status === "fulfilled") {
+        updated += 1;
+      }
+    });
+
+    return updated > 0;
   }
 
   async function fetchJson(url, init) {
