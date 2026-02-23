@@ -3,7 +3,6 @@
 
   const SLOT_MINUTES = 15;
   const SLOTS_PER_DAY = 24 * 60 / SLOT_MINUTES;
-  const MIN_LEFT_HANDLE_SLOT = 1;
   const LOCAL_STORAGE_PREFIX = "bmwbot_kolyan_schedule_v1";
   const DEFAULT_TIMEZONE = "Europe/Moscow";
 
@@ -450,7 +449,7 @@
     if (!Number.isFinite(value)) return;
     const arr = normalizeTuneBoundaries(state.tuneBoundaries);
     const i = clampInt(index, 0, 3, 0);
-    const min = i === 0 ? MIN_LEFT_HANDLE_SLOT : arr[i - 1];
+    const min = i === 0 ? 0 : arr[i - 1];
     const max = i === 3 ? SLOTS_PER_DAY : arr[i + 1];
     arr[i] = clampInt(value, min, max, arr[i]);
 
@@ -476,11 +475,6 @@
     const out = arr.map((v) => clampInt(Number(v), 0, SLOTS_PER_DAY, 0));
     for (let i = 1; i < out.length; i += 1) {
       if (out[i] < out[i - 1]) out[i] = out[i - 1];
-    }
-    // All handles at exact left edge create a UX trap (hard to grab them back).
-    // Keep an equivalent visual state, but shift the collapsed stack by one slot.
-    if (out[0] === 0 && out[1] === 0 && out[2] === 0 && out[3] === 0) {
-      return [MIN_LEFT_HANDLE_SLOT, MIN_LEFT_HANDLE_SLOT, MIN_LEFT_HANDLE_SLOT, MIN_LEFT_HANDLE_SLOT];
     }
     return out;
   }
@@ -520,7 +514,7 @@
 
       if (blueStart < 0) {
         // All-red day is valid: keep every editable zone collapsed to zero.
-        state.tuneBoundaries = normalizeTuneBoundaries([MIN_LEFT_HANDLE_SLOT, MIN_LEFT_HANDLE_SLOT, MIN_LEFT_HANDLE_SLOT, MIN_LEFT_HANDLE_SLOT]);
+        state.tuneBoundaries = normalizeTuneBoundaries([0, 0, 0, 0]);
         state.segments = segmentsFromTuneBoundaries(state.tuneBoundaries);
         return;
       }
@@ -873,13 +867,40 @@
 
   function findNearestTuneBoundaryIndex(slot) {
     const boundaries = normalizeTuneBoundaries(state.tuneBoundaries);
-    let bestIdx = 0;
     let bestDist = Infinity;
+    const candidates = [];
     for (let i = 0; i < boundaries.length; i += 1) {
       const dist = Math.abs(boundaries[i] - slot);
       if (dist < bestDist) {
         bestDist = dist;
+        candidates.length = 0;
+        candidates.push(i);
+      } else if (dist === bestDist) {
+        candidates.push(i);
+      }
+    }
+    if (candidates.length <= 1) {
+      return candidates[0] ?? 0;
+    }
+
+    const base = boundaries[candidates[0]];
+    const preferRight = slot >= base;
+    let bestIdx = candidates[0];
+    let bestRoom = -1;
+    for (const i of candidates) {
+      const current = boundaries[i];
+      const min = i === 0 ? 0 : boundaries[i - 1];
+      const max = i === boundaries.length - 1 ? SLOTS_PER_DAY : boundaries[i + 1];
+      const room = preferRight ? (max - current) : (current - min);
+      if (room > bestRoom) {
+        bestRoom = room;
         bestIdx = i;
+        continue;
+      }
+      if (room === bestRoom) {
+        if (preferRight ? i > bestIdx : i < bestIdx) {
+          bestIdx = i;
+        }
       }
     }
     return bestIdx;
