@@ -1260,6 +1260,10 @@ input[type="range"] {
   padding: 9px 10px;
 }
 
+.work-item.work-item-part {
+  grid-template-columns: 52px auto 1fr auto;
+}
+
 .work-item.two-col {
   grid-template-columns: 1fr auto;
 }
@@ -1279,6 +1283,56 @@ input[type="range"] {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.2;
+}
+
+.part-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.part-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.part-thumb.is-empty {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-align: center;
+  padding: 4px;
+}
+
+.part-price-row {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mini-info-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.mini-info-chip.is-accent {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
 }
 
 .time-pill,
@@ -1777,6 +1831,36 @@ input[type="range"] {
   .work-item {
     grid-template-columns: auto 1fr;
     align-items: start;
+  }
+
+  .work-item.work-item-part {
+    grid-template-columns: 44px auto 1fr;
+    grid-template-areas:
+      "thumb qty status"
+      "thumb main main";
+    align-items: center;
+    gap: 6px 8px;
+  }
+
+  .work-item.work-item-part .part-thumb {
+    grid-area: thumb;
+    width: 44px;
+    height: 44px;
+  }
+
+  .work-item.work-item-part .time-pill {
+    grid-area: qty;
+    justify-self: start;
+  }
+
+  .work-item.work-item-part .main {
+    grid-area: main;
+  }
+
+  .work-item.work-item-part .status-pill {
+    grid-area: status;
+    grid-column: auto;
+    justify-self: end;
   }
 
   .work-item .status-pill {

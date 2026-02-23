@@ -27,6 +27,17 @@
     },
   };
 
+  // Demo-only photo catalog for static preview in tabs.
+  // Real production source should come from backend / Google Drive file index.
+  const DEMO_PART_PHOTO_INDEX = {
+    "f10-black-front-kit": [
+      "./assets/parts-demo/f10-black-front-kit/main.jpg",
+    ],
+    "e70-selector-carbon": [
+      "./assets/parts-demo/e70-selector-carbon/angle-01.jpg",
+    ],
+  };
+
   const state = {
     activeTab: "tune",
     tuneScope: "weekdays",
@@ -2155,6 +2166,14 @@
       const arrivals = Array.isArray(backend.arrivals) ? backend.arrivals : [];
       const parts = Array.isArray(backend.parts) ? backend.parts : [];
       const notes = Array.isArray(backend.notes) ? backend.notes : [];
+      const hasMeaningfulBackendContent =
+        arrivals.length > 0
+        || parts.length > 0
+        || notes.length > 0
+        || (backend.summary && typeof backend.summary === "object" && Object.keys(backend.summary).length > 0);
+      if (!hasMeaningfulBackendContent) {
+        return finalizeWorkSnapshot(buildDemoTodayWorkSnapshot(today, openWindows));
+      }
       return finalizeWorkSnapshot({
         date: backend.date || today,
         source: backend.source ? String(backend.source) : "api",
@@ -2162,6 +2181,7 @@
         parts: parts.map(normalizePartItem).filter(Boolean),
         notes: notes.map((n) => String(n)).filter(Boolean),
         openWindows,
+        summary: backend.summary && typeof backend.summary === "object" ? backend.summary : null,
       });
     }
 
@@ -2218,6 +2238,9 @@
           subtitle: "Клиент: Игорь, ориентир " + times[1],
           statusLabel: "Проверить остаток",
           statusTone: "warn",
+          lineTotalRub: 32500,
+          installPricePlaceholderRub: 6000,
+          photoFolderKey: "f10-black-front-kit",
         },
         {
           qty: 2,
@@ -2225,6 +2248,12 @@
           subtitle: "Под выдачу и фото-подтверждение",
           statusLabel: "Готово",
           statusTone: "ok",
+          unitPriceRub: 3200,
+          lineTotalRub: 6400,
+          installPricePlaceholderRub: 0,
+          photoCandidates: [
+            "./assets/parts-demo/f10-black-front-kit/main.jpg",
+          ],
         },
         {
           qty: 1,
@@ -2232,6 +2261,9 @@
           subtitle: "Клиент спрашивал совместимость",
           statusLabel: "Нужна консультация",
           statusTone: "warn",
+          lineTotalRub: 17500,
+          installPricePlaceholderRub: 4500,
+          photoFolderKey: "e70-selector-carbon",
         },
       ],
       notes: [
@@ -2249,11 +2281,27 @@
     const parts = Array.isArray(safe.parts) ? safe.parts : [];
     const notes = Array.isArray(safe.notes) ? safe.notes : [];
     const openWindows = Array.isArray(safe.openWindows) ? safe.openWindows : [];
+    const incomingSummary = safe.summary && typeof safe.summary === "object" ? safe.summary : null;
 
     const totalPartsQty = parts.reduce((sum, p) => sum + Math.max(0, Number(p.qty) || 0), 0);
     const approvals = arrivals.filter((a) => a.statusTone === "warn" || a.statusTone === "danger").length
       + parts.filter((p) => p.statusTone === "warn" || p.statusTone === "danger").length;
     const openMinutes = openWindows.reduce((sum, w) => sum + (Number(w.durationMin) || 0), 0);
+    const computedPartsTotalRub = parts.reduce((sum, p) => sum + Math.max(0, Number(p.lineTotalRub) || 0), 0);
+    const computedInstallPlaceholderRub = parts.reduce((sum, p) => sum + Math.max(0, Number(p.installPricePlaceholderRub) || 0), 0);
+    const partsTotalRub = Number(incomingSummary?.partsTotalRub ?? incomingSummary?.parts_total_rub ?? computedPartsTotalRub) || 0;
+    const installPlaceholderTotalRub = Number(
+      incomingSummary?.installPlaceholderTotalRub
+      ?? incomingSummary?.install_placeholder_total_rub
+      ?? incomingSummary?.installTotalPlaceholderRub
+      ?? computedInstallPlaceholderRub
+    ) || 0;
+    const expectedCheckRub = Number(
+      incomingSummary?.expectedCheckRub
+      ?? incomingSummary?.expected_check_rub
+      ?? incomingSummary?.expectedTotalRub
+      ?? (partsTotalRub + installPlaceholderTotalRub)
+    ) || 0;
 
     return {
       date: typeof safe.date === "string" ? safe.date : todayISO(),
@@ -2269,6 +2317,9 @@
         approvalsCount: approvals,
         openWindowsCount: openWindows.length,
         openMinutes,
+        partsTotalRub,
+        installPlaceholderTotalRub,
+        expectedCheckRub,
       },
     };
   }
@@ -2286,13 +2337,65 @@
 
   function normalizePartItem(raw) {
     if (!raw || typeof raw !== "object") return null;
+    const qty = Math.max(0, Number(raw.qty) || 0);
+    const unitPriceRub = numberOrNull(
+      raw.unitPriceRub ?? raw.unit_price_rub ?? raw.priceRub ?? raw.price_rub ?? raw.unit_price
+    );
+    const lineTotalRub = numberOrNull(
+      raw.lineTotalRub ?? raw.line_total_rub ?? raw.totalPriceRub ?? raw.total_price_rub ?? raw.total_price
+    );
+    const installPricePlaceholderRub = numberOrNull(
+      raw.installPricePlaceholderRub
+      ?? raw.install_price_placeholder_rub
+      ?? raw.installPriceRub
+      ?? raw.install_price_rub
+      ?? raw.install_price_placeholder
+    );
     return {
-      qty: Math.max(0, Number(raw.qty) || 0),
+      qty,
       title: String(raw.title || raw.name || "Деталь"),
       subtitle: String(raw.subtitle || raw.note || ""),
       statusLabel: String(raw.statusLabel || raw.status || "Без статуса"),
       statusTone: normalizeStatusTone(raw.statusTone || raw.status),
+      unitPriceRub,
+      lineTotalRub: lineTotalRub ?? (unitPriceRub != null ? qty * unitPriceRub : null),
+      installPricePlaceholderRub,
+      photoUrl: resolvePartPhotoUrl(raw),
     };
+  }
+
+  function numberOrNull(value) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function formatRub(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+    return `${Math.round(num).toLocaleString("ru-RU")} ₽`;
+  }
+
+  function pickPrimaryPhotoCandidate(candidates) {
+    if (!Array.isArray(candidates)) return null;
+    const list = candidates
+      .map((x) => (typeof x === "string" ? x.trim() : ""))
+      .filter(Boolean);
+    if (!list.length) return null;
+    const main = list.find((url) => /(^|[\\/])main([._-]|$)/i.test(url));
+    return main || list[0];
+  }
+
+  function resolvePartPhotoUrl(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    if (typeof raw.photoUrl === "string" && raw.photoUrl.trim()) return raw.photoUrl.trim();
+    if (typeof raw.imageUrl === "string" && raw.imageUrl.trim()) return raw.imageUrl.trim();
+    const direct = pickPrimaryPhotoCandidate(raw.photoCandidates || raw.photo_candidates || raw.photos);
+    if (direct) return direct;
+    const folderKey = typeof raw.photoFolderKey === "string"
+      ? raw.photoFolderKey
+      : (typeof raw.photo_folder_key === "string" ? raw.photo_folder_key : "");
+    if (!folderKey) return null;
+    return pickPrimaryPhotoCandidate(DEMO_PART_PHOTO_INDEX[folderKey]) || null;
   }
 
   function normalizeStatusTone(value) {
@@ -2318,18 +2421,89 @@
   }
 
   function renderTodayPartsTab(snapshot) {
-    els.todayPartsMeta.textContent = `${formatIsoDate(snapshot.date)} • ${snapshot.summary.partsLinesCount} позиций • всего штук: ${snapshot.summary.totalPartsQty}`;
-    renderList(
-      els.todayPartsList,
-      snapshot.parts.map((item) => ({
-        time: item.qty > 0 ? `x${item.qty}` : "-",
-        title: item.title,
-        subtitle: item.subtitle,
-        statusLabel: item.statusLabel,
-        statusTone: item.statusTone,
-      })),
-      "На сегодня детали еще не сформированы"
-    );
+    els.todayPartsMeta.textContent =
+      `${formatIsoDate(snapshot.date)} • ${snapshot.summary.partsLinesCount} позиций • всего штук: ${snapshot.summary.totalPartsQty}`;
+    renderPartsList(els.todayPartsList, snapshot.parts, "На сегодня детали еще не сформированы");
+  }
+
+  function renderPartsList(container, parts, emptyMessage) {
+    container.innerHTML = "";
+    if (!Array.isArray(parts) || parts.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = emptyMessage;
+      container.appendChild(empty);
+      return;
+    }
+
+    parts.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "work-item work-item-part";
+
+      const thumb = document.createElement("div");
+      thumb.className = "part-thumb";
+      if (item.photoUrl) {
+        const img = document.createElement("img");
+        img.src = item.photoUrl;
+        img.alt = item.title || "Фото детали";
+        img.loading = "lazy";
+        img.decoding = "async";
+        thumb.appendChild(img);
+      } else {
+        thumb.classList.add("is-empty");
+        thumb.textContent = "NO PHOTO";
+      }
+      row.appendChild(thumb);
+
+      const qty = document.createElement("div");
+      qty.className = "time-pill";
+      qty.textContent = item.qty > 0 ? `x${item.qty}` : "-";
+      row.appendChild(qty);
+
+      const main = document.createElement("div");
+      main.className = "main";
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = item.title || "";
+      main.appendChild(title);
+
+      const sub = document.createElement("div");
+      sub.className = "sub";
+      sub.textContent = item.subtitle || "";
+      main.appendChild(sub);
+
+      const priceRow = document.createElement("div");
+      priceRow.className = "part-price-row";
+      if (item.lineTotalRub != null) {
+        const chip = document.createElement("span");
+        chip.className = "mini-info-chip";
+        chip.textContent = `деталь: ${formatRub(item.lineTotalRub)}`;
+        priceRow.appendChild(chip);
+      }
+      if (item.installPricePlaceholderRub != null) {
+        const chip = document.createElement("span");
+        chip.className = "mini-info-chip is-accent";
+        chip.textContent = `установка*: ${formatRub(item.installPricePlaceholderRub)}`;
+        priceRow.appendChild(chip);
+      }
+      if (item.unitPriceRub != null && item.qty > 1) {
+        const chip = document.createElement("span");
+        chip.className = "mini-info-chip";
+        chip.textContent = `${formatRub(item.unitPriceRub)}/шт`;
+        priceRow.appendChild(chip);
+      }
+      if (priceRow.childElementCount) {
+        main.appendChild(priceRow);
+      }
+      row.appendChild(main);
+
+      const status = document.createElement("div");
+      status.className = `status-pill is-${normalizeStatusTone(item.statusTone)}`;
+      status.textContent = item.statusLabel || "OK";
+      row.appendChild(status);
+
+      container.appendChild(row);
+    });
   }
 
   function renderTodaySummaryTab(snapshot) {
@@ -2338,6 +2512,9 @@
       { label: "Записи", value: String(snapshot.summary.arrivalsCount) },
       { label: "Детали (строки)", value: String(snapshot.summary.partsLinesCount) },
       { label: "Штук деталей", value: String(snapshot.summary.totalPartsQty) },
+      { label: "Сумма деталей", value: formatRub(snapshot.summary.partsTotalRub) },
+      { label: "Установка* (placeholder)", value: formatRub(snapshot.summary.installPlaceholderTotalRub) },
+      { label: "Ожидаемый чек", value: formatRub(snapshot.summary.expectedCheckRub) },
       { label: "Требуют внимания", value: String(snapshot.summary.approvalsCount) },
       { label: "Окон работы", value: String(snapshot.summary.openWindowsCount) },
       { label: "Открыто минут", value: String(snapshot.summary.openMinutes) },
