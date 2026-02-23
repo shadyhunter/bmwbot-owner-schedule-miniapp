@@ -508,7 +508,7 @@
     });
 
     if (els.btnResetPreviewDefault && !lockDuringDateLoad) {
-      els.btnResetPreviewDefault.disabled = state.tuneScope !== "specific";
+      els.btnResetPreviewDefault.disabled = false;
     }
 
     toggleModeFields();
@@ -653,11 +653,7 @@
       logEvent("Подожди: дата ещё загружается, сброс временно недоступен.");
       return;
     }
-    if (!(state.tuneScope === "specific" && state.mode === "override")) {
-      logEvent("Кнопка доступна только для конкретной даты.");
-      renderAll();
-      return;
-    }
+    const wasSpecificMode = state.tuneScope === "specific" && state.mode === "override";
     const currentIsoDate = String(state.date || "");
     const dates = upcomingCalendarDates(14);
     let ok = 0;
@@ -709,11 +705,13 @@
       setCalendarRowsPending(failedDates, false);
     }
 
-    state.tuneScope = "specific";
-    state.mode = "override";
-    state.date = currentIsoDate;
-    state.tuneAdvancedOpen = false;
-    state.calendarOpen = true;
+    if (wasSpecificMode) {
+      state.tuneScope = "specific";
+      state.mode = "override";
+      state.date = currentIsoDate;
+      state.tuneAdvancedOpen = false;
+      state.calendarOpen = true;
+    }
     hydrateControlsFromState();
     renderAll();
     logEvent(`Reset default finished: ${ok}/${dates.length} saved, failed=${failed}.`);
@@ -1289,6 +1287,7 @@
     state.calendarBackendLoading = true;
     const dates = upcomingCalendarDates(14);
     const base = apiBase.replace(/\/$/, "");
+    const templateMirrorRefresh = refreshGroupTemplateMirrorsFromBackend().catch(() => false);
 
     try {
       const results = await Promise.all(dates.map(async (isoDate) => {
@@ -1301,6 +1300,11 @@
       }));
 
       if (requestId !== calendarBackendRequestSeq) return;
+      try {
+        await templateMirrorRefresh;
+      } catch {
+        // ignore template mirror sync issues here; date rows still update
+      }
 
       const next = Object.create(null);
       for (const item of results) {
