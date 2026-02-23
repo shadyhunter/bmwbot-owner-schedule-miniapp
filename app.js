@@ -1014,7 +1014,8 @@
 
     let loaded = null;
     const preloadedLocal = loadLocal(key);
-    if (preloadedLocal) {
+    const allowOptimisticLocalPreload = !(state.tuneScope === "specific" && state.mode === "override" && apiBase);
+    if (preloadedLocal && allowOptimisticLocalPreload) {
       applyLoadedSchedule(preloadedLocal);
       state.source = "local";
       state.lastLoadedFrom = "local";
