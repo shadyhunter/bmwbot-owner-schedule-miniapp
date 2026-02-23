@@ -669,6 +669,19 @@
     renderAll();
     logEvent(`Template reset applied for date (${targetScope}); saving override...`);
     await saveSchedule();
+    if (templateInfo.comparable) {
+      try {
+        await loadSchedule();
+        const actualComparable = extractComparableScheduleState(buildPayload());
+        if (areComparableSchedulesEqual(actualComparable, templateInfo.comparable)) {
+          logEvent("Template apply verification OK: persisted date matches day template.");
+        } else {
+          logEvent("Template apply verification FAILED: loaded date differs after save.");
+        }
+      } catch (err) {
+        logEvent(`Template apply verification error: ${safeErr(err)}`);
+      }
+    }
   }
 
   function isRecentlySavedMarkerForDate(isoDate) {
