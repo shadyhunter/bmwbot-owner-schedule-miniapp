@@ -858,12 +858,13 @@ button.danger {
 
 .tune-simple-grid-wrap {
   position: relative;
+  padding-top: 6px;
 }
 
 .tune-simple-grid-wrap.is-day-off::after {
   content: "";
   position: absolute;
-  inset: 0 0 4px 0;
+  inset: 6px 0 4px 0;
   background: linear-gradient(
     180deg,
     rgba(128, 134, 142, 0.18) 0%,
@@ -927,6 +928,29 @@ button.danger {
   pointer-events: auto;
   touch-action: none;
   cursor: ew-resize;
+}
+
+.tune-simple-grid-wrap .timeline-boundary-overlay {
+  top: 6px;
+}
+
+.tune-simple-grid-wrap .timeline-boundary-overlay::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -6px;
+  height: 6px;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0,
+      rgba(255, 255, 255, 0) calc((100% + var(--slot-gap)) / 18 - 1px),
+      rgba(255, 255, 255, 0.58) calc((100% + var(--slot-gap)) / 18 - 1px),
+      rgba(255, 255, 255, 0.58) calc((100% + var(--slot-gap)) / 18)
+    );
+  opacity: 0.95;
 }
 
 .timeline-boundary-overlay.is-day-off {
@@ -1041,18 +1065,6 @@ button.danger {
   left: 0;
   width: 1px;
   background: rgba(0, 0, 0, 0.18);
-}
-
-.timeline-slot.qhour::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 2px;
-  width: 1px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
-  pointer-events: none;
 }
 
 @keyframes timeline-loading-shimmer {
