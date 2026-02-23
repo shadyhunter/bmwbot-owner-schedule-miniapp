@@ -962,8 +962,11 @@
     }
     const stops = [];
     list.forEach((segment) => {
-      const startPct = ((segment.startSlot || 0) / SLOTS_PER_DAY) * 100;
-      const endPct = ((segment.endSlot || 0) / SLOTS_PER_DAY) * 100;
+      const startSlot = Math.max(TIMELINE_VISIBLE_START_SLOT, Number(segment.startSlot || 0));
+      const endSlot = Math.min(SLOTS_PER_DAY, Number(segment.endSlot || 0));
+      if (endSlot <= startSlot) return;
+      const startPct = ((startSlot - TIMELINE_VISIBLE_START_SLOT) / TIMELINE_VISIBLE_SLOT_COUNT) * 100;
+      const endPct = ((endSlot - TIMELINE_VISIBLE_START_SLOT) / TIMELINE_VISIBLE_SLOT_COUNT) * 100;
       const color = segment.zone === "OPEN_NOTICE"
         ? "var(--zone-open-notice)"
         : segment.zone === "OPEN_APPROVAL"
@@ -971,6 +974,9 @@
           : "var(--zone-closed)";
       stops.push(`${color} ${startPct.toFixed(2)}% ${endPct.toFixed(2)}%`);
     });
+    if (!stops.length) {
+      return "linear-gradient(90deg, var(--zone-closed) 0%, var(--zone-closed) 100%)";
+    }
     return `linear-gradient(90deg, ${stops.join(", ")})`;
   }
 
