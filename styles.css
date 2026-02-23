@@ -745,7 +745,7 @@ button.danger {
 }
 
 .tune-calendar-tag.is-loading {
-  color: rgba(255, 255, 255, 0.86);
+  color: transparent;
   border-color: color-mix(in srgb, var(--line) 70%, white);
   background:
     linear-gradient(

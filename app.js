@@ -940,7 +940,7 @@
       if (row.sourceKind === "override") tag.classList.add("is-override");
       if (row.isActive) tag.classList.add("is-active");
       if (row.isDayOff) tag.classList.add("is-day-off");
-      tag.textContent = row.tag;
+      tag.textContent = row.isLoading ? "\u00A0" : row.tag;
 
       btn.appendChild(dateBox);
       btn.appendChild(mini);
@@ -977,8 +977,13 @@
 
   function buildTuneCalendarRowData(isoDate) {
     const isActive = state.tuneScope === "specific" && state.date === isoDate;
-    const isLoading = isCalendarRowPending(isoDate);
     const source = resolveTuneCalendarRowSource(isoDate);
+    const isLoading = isCalendarRowPending(isoDate)
+      || (
+        !!state.calendarBackendLoading
+        && hasAnyCalendarPendingRows()
+        && source.sourceKind === "override"
+      );
     const gradient = buildMiniTimelineGradient(source.segments);
     const d = new Date(`${isoDate}T12:00:00`);
     const weekdayShort = d.toLocaleDateString("ru-RU", { weekday: "short" });
@@ -1206,6 +1211,10 @@
 
   function isCalendarRowPending(isoDate) {
     return !!(state.calendarPendingRows && state.calendarPendingRows[String(isoDate)]);
+  }
+
+  function hasAnyCalendarPendingRows() {
+    return !!(state.calendarPendingRows && Object.keys(state.calendarPendingRows).length);
   }
 
   function setCalendarRowsPending(isoDates, pending = true) {
