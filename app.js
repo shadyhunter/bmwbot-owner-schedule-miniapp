@@ -614,11 +614,7 @@
       const dateMain = document.createElement("div");
       dateMain.className = "main";
       dateMain.textContent = row.dateLabel;
-      const dateSub = document.createElement("div");
-      dateSub.className = "sub";
-      dateSub.textContent = row.dayLabel;
       dateBox.appendChild(dateMain);
-      dateBox.appendChild(dateSub);
 
       const mini = document.createElement("div");
       mini.className = "tune-calendar-mini";
@@ -674,9 +670,12 @@
     const gradient = buildMiniTimelineGradient(source.segments);
     const d = new Date(`${isoDate}T12:00:00`);
     const weekdayShort = d.toLocaleDateString("ru-RU", { weekday: "short" });
-    const dateLabel = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+    const weekday2 = String(weekdayShort || "").replace(/\./g, "").trim().slice(0, 2).toLowerCase();
+    const dateShort = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-    let tag = source.sourceKind === "override" ? "дата" : (isWeekend ? "выходные" : "будни");
+    let tag = source.sourceKind === "override"
+      ? "дата"
+      : (isWeekend ? "выходные" : "будни");
     if (source.isDayOff) tag = "выходной";
     if (isActive && !source.isDayOff) tag = "открыта";
     if (isRecentlySavedMarkerForDate(isoDate)) tag = "сохранено";
@@ -686,8 +685,8 @@
       sourceKind: source.sourceKind,
       isDayOff: !!source.isDayOff,
       gradient,
-      dayLabel: `${weekdayShort} • ${isoDate}`,
-      dateLabel,
+      dayLabel: isoDate,
+      dateLabel: `${dateShort} ${weekday2}`,
       tag,
     };
   }

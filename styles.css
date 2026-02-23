@@ -487,17 +487,18 @@ button.danger {
 
 .tune-calendar-date {
   display: grid;
-  gap: 1px;
+  gap: 0;
 }
 
 .tune-calendar-date .main {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.15;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.94);
 }
 
 .tune-calendar-date .sub {
-  font-size: 10px;
-  color: var(--muted);
+  display: none;
 }
 
 .tune-calendar-mini {
@@ -1316,9 +1317,7 @@ input[type="range"] {
   }
 
   .tune-calendar-date .sub {
-    justify-self: end;
-    text-align: right;
-    font-size: 10px;
+    display: none;
   }
 
   .tune-calendar-tag {
