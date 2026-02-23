@@ -581,6 +581,11 @@ button.danger {
   background: color-mix(in srgb, var(--accent-2) 12%, transparent);
 }
 
+/* Advanced toggle is deprecated in the simplified UX. */
+#btnOpenAdvancedMini {
+  display: none !important;
+}
+
 .tune-scope-hint {
   margin-top: 8px;
   font-size: 12px;
@@ -1532,62 +1537,111 @@ input[type="range"] {
     grid-template-columns: 1fr;
   }
 
-  .tune-top-actions button {
-    flex: 1 1 100%;
+  .tab-panels > .timeline-panel[data-tab-panel="tune"] {
+    order: -2;
   }
 
-  .tune-templates-wrap {
-    flex: 1 1 100%;
+  .tab-panels > .controls[data-tab-panel="tune"] {
+    order: -1;
   }
 
+  .tune-top-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 30px;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .tune-top-actions button,
+  .tune-top-actions .tune-templates-wrap {
+    flex: none;
+    min-width: 0;
+  }
+
+  .tune-top-actions button:not(.tune-mini-icon),
   .tune-templates-wrap > button {
-    width: 100%;
+    min-height: 34px;
+    padding: 6px 6px;
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.01em;
+  }
+
+  .tune-top-actions .tune-mini-icon {
+    margin-left: 0;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+  }
+
+  .tune-reset-mini {
+    margin-left: 0;
+    justify-self: end;
   }
 
   .tune-templates-menu {
     left: 0;
-    right: 0;
-    min-width: 0;
+    right: auto;
+    min-width: 128px;
   }
 
   .tune-top-actions button.tune-mini-icon {
     flex: 0 0 auto;
   }
 
+  .tune-scope-hint,
+  .tune-calendar-head .muted,
+  .timeline-help,
+  .boundary-summary {
+    display: none !important;
+  }
+
   .tune-calendar-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    align-items: center;
   }
 
   .tune-calendar-list {
     max-height: 280px;
+    gap: 5px;
   }
 
   .tune-calendar-row {
-    grid-template-columns: 1fr;
-    align-items: stretch;
+    grid-template-columns: 72px minmax(0, 1fr) 68px;
+    align-items: center;
     gap: 6px;
+    padding: 6px 7px;
   }
 
   .tune-calendar-date {
     grid-template-columns: auto 1fr;
-    align-items: center;
-    display: grid;
-    gap: 4px 8px;
+    gap: 4px 6px;
+  }
+
+  .tune-calendar-date .main,
+  .tune-calendar-date .sub {
+    font-size: 12px;
   }
 
   .tune-calendar-date .sub {
-    display: block;
     justify-self: center;
     text-align: center;
     transform: translateX(1px);
   }
 
+  .tune-calendar-mini {
+    height: 8px;
+  }
+
   .tune-calendar-tag {
-    width: auto;
-    max-width: 100%;
-    justify-self: start;
+    width: 68px;
+    max-width: none;
+    justify-self: end;
+    font-size: 9px;
+    padding: 4px 4px;
   }
 
   .segment-body {
@@ -1597,6 +1651,7 @@ input[type="range"] {
   .timeline-header {
     flex-direction: column;
     align-items: stretch;
+    margin-bottom: 6px;
   }
 
   .timeline-head-main {
