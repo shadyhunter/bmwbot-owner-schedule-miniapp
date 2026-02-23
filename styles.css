@@ -1043,6 +1043,18 @@ button.danger {
   background: rgba(0, 0, 0, 0.18);
 }
 
+.timeline-slot.qhour::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 1px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+}
+
 @keyframes timeline-loading-shimmer {
   0% {
     background-position: 180% 0, 0 0;
