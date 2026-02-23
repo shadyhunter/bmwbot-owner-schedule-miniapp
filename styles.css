@@ -1662,7 +1662,7 @@ input[type="range"] {
 
   .tune-top-actions {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 30px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px minmax(0, 1fr) minmax(0, 1fr) 30px;
     gap: 4px;
     align-items: center;
   }
@@ -1695,7 +1695,7 @@ input[type="range"] {
 
   .tune-reset-mini {
     margin-left: 0;
-    justify-self: end;
+    justify-self: stretch;
   }
 
   .tune-templates-menu {
