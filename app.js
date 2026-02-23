@@ -428,7 +428,7 @@
     els.btnOpenAdvancedMini.classList.toggle("is-active", state.tuneAdvancedOpen && state.tuneScope === "specific");
     if (els.btnTemplatesMenuToggle) {
       const templateLabel = state.templateScopeSelected === "weekends" ? "Выходные" : "Будни";
-      els.btnTemplatesMenuToggle.textContent = `Шаблоны: ${templateLabel}`;
+      els.btnTemplatesMenuToggle.textContent = "Шаблоны";
       els.btnTemplatesMenuToggle.setAttribute("aria-expanded", state.templatesMenuOpen ? "true" : "false");
       els.btnTemplatesMenuToggle.classList.toggle("is-active", state.templatesMenuOpen);
     }
@@ -1767,9 +1767,9 @@
       if (state.tuneScope === "specific") {
         els.tuneTimelineTitle.textContent = `Таймлайн дня (дата: ${formatIsoDate(state.date)})`;
       } else if (state.tuneScope === "weekends") {
-        els.tuneTimelineTitle.textContent = "Таймлайн дня (шаблон выходных)";
+        els.tuneTimelineTitle.textContent = "Таймлайн дня - шаблон ВЫХОДНЫЕ";
       } else {
-        els.tuneTimelineTitle.textContent = "Таймлайн дня (шаблон будней)";
+        els.tuneTimelineTitle.textContent = "Таймлайн дня - шаблон БУДНИ";
       }
     }
     const slotMap = expandToSlots(state.segments, getZoneNoticeDefaults());
