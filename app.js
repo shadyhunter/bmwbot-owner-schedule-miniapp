@@ -1764,6 +1764,7 @@
     const payload = buildPayload();
     if (isGroupTuneScope()) {
       persistLocalMirrorAndVerify(payload);
+      await saveBackendTemplateMirrorForGroupPayload(payload, state.tuneScope);
       const propagated = await propagateGroupTemplateToUpcomingDates(payload, state.tuneScope);
       state.source = "local";
       state.version = payload.version;
@@ -1897,6 +1898,42 @@
     }
     saveLocal(localKeyFor("override", payload.date, null), payload);
     return true;
+  }
+
+  function buildTemplatePayloadFromGroupPayload(groupPayload, weekday) {
+    const src = groupPayload && typeof groupPayload === "object" ? groupPayload : {};
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.mode = "template";
+    copy.date = null;
+    copy.weekday = clampInt(Number(weekday), 0, 6, 1);
+    copy.day_off = false;
+    copy.day_status = null;
+    copy.default_notice_minutes_blue = 0;
+    if (!copy.zone_notice_defaults || typeof copy.zone_notice_defaults !== "object") {
+      copy.zone_notice_defaults = {};
+    }
+    copy.zone_notice_defaults.OPEN_APPROVAL = 0;
+    return copy;
+  }
+
+  async function saveBackendTemplateMirrorForGroupPayload(groupPayload, scope) {
+    const apiBase = getApiBase();
+    if (!apiBase) return false;
+    const representativeWeekday = scope === "weekends" ? 6 : 1;
+    const payload = buildTemplatePayloadFromGroupPayload(groupPayload, representativeWeekday);
+    try {
+      await fetchJson(`${apiBase.replace(/\/$/, "")}/schedule/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      // Keep local group mirrors aligned with what we expect startup/refresh to fetch from backend.
+      saveLocal(groupLocalKeyFor(scope), payload);
+      return true;
+    } catch (err) {
+      logEvent(`Template mirror save warning (${scope}): ${safeErr(err)}`);
+      return false;
+    }
   }
 
   async function propagateGroupTemplateToUpcomingDates(templatePayload, scope) {
