@@ -1149,6 +1149,7 @@
 
     if (showTimelineLoading) {
       state.scheduleLoading = true;
+      renderTuneScopeControls();
       renderTimeline();
     } else {
       state.scheduleLoading = false;
