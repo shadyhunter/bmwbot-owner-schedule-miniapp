@@ -50,6 +50,9 @@
     lastLoadedFrom: "local",
     lastSchedulePayload: null,
     lastSaveMarker: null,
+    calendarBackendCache: Object.create(null),
+    calendarBackendLoading: false,
+    calendarBackendLoadedAt: 0,
   };
 
   const els = {
@@ -129,6 +132,7 @@
   let saveFxTimer = null;
   let revertFxTimer = null;
   let scheduleLoadRequestSeq = 0;
+  let calendarBackendRequestSeq = 0;
 
   init();
 
@@ -141,6 +145,7 @@
     setTuneScope("weekdays", { skipLoad: true, keepAdvancedState: true });
     renderAll();
     void loadSchedule();
+    void refreshCalendarBackendWindow({ force: false });
   }
 
   function initTelegram() {
@@ -594,6 +599,7 @@
       tuneScope: state.tuneScope,
       date: state.tuneScope === "specific" ? state.date : null,
     };
+    void refreshCalendarBackendWindow({ force: true });
   }
 
   function applyPostSuccessfulSaveUi() {
@@ -849,6 +855,7 @@
       els.tuneCalendarList.innerHTML = "";
       return;
     }
+    void refreshCalendarBackendWindow({ force: false });
 
     const start = todayISO();
     const rows = [];
@@ -970,6 +977,15 @@
         sourceKind: "override",
         segments: state.segments.slice(),
         isDayOff: !!state.dayOff,
+      };
+    }
+
+    const backendRow = getCalendarBackendRow(isoDate);
+    if (backendRow && Array.isArray(backendRow.segments) && backendRow.segments.length) {
+      return {
+        sourceKind: backendRow.sourceKind,
+        segments: backendRow.segments,
+        isDayOff: !!backendRow.isDayOff,
       };
     }
 
@@ -1110,6 +1126,91 @@
       segments,
       comparable: extractComparableScheduleState(payload),
     };
+  }
+
+  function backendSourceKindForDate(source, isoDate) {
+    const d = new Date(`${isoDate}T12:00:00`);
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    if (source === "override") return "override";
+    if (source === "template" || source === "template_fallback") {
+      return isWeekend ? "group-weekends" : "group-weekdays";
+    }
+    if (source === "default") return "demo";
+    return "demo";
+  }
+
+  function getCalendarBackendRow(isoDate) {
+    const row = state.calendarBackendCache && state.calendarBackendCache[isoDate];
+    return row && typeof row === "object" ? row : null;
+  }
+
+  function toCalendarBackendRow(isoDate, payload) {
+    const data = payloadData(payload);
+    if (!data || !Array.isArray(data.segments)) return null;
+    const parsed = data.segments.map(toSlotSegment).filter(Boolean);
+    if (!parsed.length) return null;
+    const greenDefault = clampInt(
+      Number(
+        data.default_notice_minutes_green
+        ?? data.default_notice_minutes
+        ?? (data.zone_notice_defaults && data.zone_notice_defaults.OPEN_NOTICE)
+        ?? state.defaultNoticeMinutesGreen
+      ),
+      0,
+      24 * 60,
+      state.defaultNoticeMinutesGreen
+    );
+    return {
+      isoDate,
+      sourceKind: backendSourceKindForDate(String(data.source || ""), isoDate),
+      isDayOff: readDayOffFromPayload(payload),
+      segments: canonicalizeSegments(parsed, { OPEN_NOTICE: greenDefault, OPEN_APPROVAL: 0 }),
+      version: typeof data.version === "string" ? data.version : "",
+      loadedAt: Date.now(),
+    };
+  }
+
+  async function refreshCalendarBackendWindow(options = {}) {
+    const apiBase = getApiBase();
+    if (!apiBase) return;
+    const force = !!options.force;
+    const now = Date.now();
+    if (!force && state.calendarBackendLoading) return;
+    if (!force && state.calendarBackendLoadedAt && now - state.calendarBackendLoadedAt < 5000) return;
+
+    const requestId = ++calendarBackendRequestSeq;
+    state.calendarBackendLoading = true;
+    const dates = upcomingCalendarDates(14);
+    const base = apiBase.replace(/\/$/, "");
+
+    try {
+      const results = await Promise.all(dates.map(async (isoDate) => {
+        try {
+          const payload = await fetchJson(`${base}/schedule?mode=override&date=${encodeURIComponent(isoDate)}`, { method: "GET" });
+          return { isoDate, payload };
+        } catch (error) {
+          return { isoDate, error };
+        }
+      }));
+
+      if (requestId !== calendarBackendRequestSeq) return;
+
+      const next = Object.create(null);
+      for (const item of results) {
+        if (!item || !item.payload) continue;
+        const row = toCalendarBackendRow(item.isoDate, item.payload);
+        if (row) next[item.isoDate] = row;
+      }
+      state.calendarBackendCache = next;
+      state.calendarBackendLoadedAt = Date.now();
+      renderTuneCalendarPanel();
+    } catch (err) {
+      logEvent(`Calendar backend refresh failed: ${safeErr(err)}`);
+    } finally {
+      if (requestId === calendarBackendRequestSeq) {
+        state.calendarBackendLoading = false;
+      }
+    }
   }
 
   function isCurrentSpecificDateDirty() {
