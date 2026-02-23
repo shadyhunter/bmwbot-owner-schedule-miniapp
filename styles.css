@@ -585,10 +585,10 @@ button.danger {
 .timeline-day-mode {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 4px;
+  padding: 2px;
   background: color-mix(in srgb, var(--panel) 88%, transparent);
 }
 
@@ -600,7 +600,7 @@ button.danger {
 
 .timeline-day-mode-switch {
   display: inline-flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .timeline-day-mode-btn {
@@ -608,7 +608,7 @@ button.danger {
   background: transparent;
   color: var(--muted);
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 4px 8px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -1445,11 +1445,11 @@ input[type="range"] {
   }
 
   .timeline-day-mode {
-    padding: 3px;
+    padding: 2px;
   }
 
   .timeline-day-mode-btn {
-    padding: 5px 8px;
+    padding: 4px 7px;
     font-size: 11px;
   }
 

@@ -655,9 +655,13 @@
     state.date = isoDate;
     state.mode = "override";
     state.tuneAdvancedOpen = false;
-    state.calendarOpen = true;
+    // Keep old stable loading path (calendar closed while switching date),
+    // then reopen right after load so the list remains available for the next choice.
+    state.calendarOpen = false;
     hydrateControlsFromState();
     await setTuneScope("specific", { keepAdvancedState: true, forceReload: true });
+    state.calendarOpen = true;
+    renderAll();
     const timelinePanel = document.querySelector(".timeline-panel");
     if (timelinePanel && typeof timelinePanel.scrollIntoView === "function") {
       try {
