@@ -516,15 +516,31 @@
   }
 
   function resetTunePreviewToDefault() {
+    // Invalidate any in-flight load so a late response cannot repaint old data after reset.
+    scheduleLoadRequestSeq += 1;
+    clearAllScheduleLocalCaches();
+
+    state.tuneScope = "weekdays";
+    state.mode = "override";
+    state.tuneAdvancedOpen = false;
+    state.calendarOpen = false;
+    state.date = todayISO();
+    state.weekday = String(new Date().getDay());
+    state.defaultNoticeMinutesGreen = 90;
+    state.defaultNoticeMinutesBlue = 0;
+    state.timezone = DEFAULT_TIMEZONE;
+    state.version = null;
+    state.source = "local";
+    state.lastLoadedFrom = "local";
+    state.lastSchedulePayload = null;
+    state.lastSaveMarker = null;
     state.dayOff = false;
-    state.segments = demoSegments({
-      green: clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90),
-      blue: 0,
-    });
-    applyGlobalZoneNoticesToSegments();
+    state.scheduleLoading = false;
+    state.segments = demoSegments({ green: 90, blue: 0 });
     syncTuneBoundariesFromSegments();
-    state.source = state.lastLoadedFrom || state.source || "local";
-    logEvent("Таймлайн сброшен к дефолтному шаблону (без сохранения).");
+    hydrateControlsFromState();
+
+    logEvent("Сброшены все локальные таймлайны/шаблоны и выбор режима (без сохранения в n8n).");
     renderAll();
   }
 
@@ -1957,6 +1973,27 @@
     } catch (err) {
       logEvent("Ошибка localStorage read: " + safeErr(err));
       return null;
+    }
+  }
+
+  function clearAllScheduleLocalCaches() {
+    try {
+      const prefixes = [
+        `${LOCAL_STORAGE_PREFIX}:date:`,
+        `${LOCAL_STORAGE_PREFIX}:weekday:`,
+        `${LOCAL_STORAGE_PREFIX}:group:`,
+      ];
+      const toDelete = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (prefixes.some((p) => key.startsWith(p))) {
+          toDelete.push(key);
+        }
+      }
+      toDelete.forEach((key) => localStorage.removeItem(key));
+    } catch (err) {
+      logEvent("Ошибка очистки localStorage: " + safeErr(err));
     }
   }
 
