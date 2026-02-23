@@ -446,8 +446,9 @@
       els.btnTemplatesWeekends.setAttribute("aria-pressed", activeWeekends ? "true" : "false");
     }
     if (els.btnResetPreviewDefault) {
-      els.btnResetPreviewDefault.hidden = true;
-      els.btnResetPreviewDefault.disabled = true;
+      els.btnResetPreviewDefault.hidden = false;
+      els.btnResetPreviewDefault.title = "К шаблону дня";
+      els.btnResetPreviewDefault.setAttribute("aria-label", "К шаблону дня");
     }
     if (els.timelineDayModeToggle) {
       const showDayMode = state.tuneScope === "specific";
@@ -478,6 +479,10 @@
         btn.disabled = false;
       }
     });
+
+    if (els.btnResetPreviewDefault && !lockDuringDateLoad) {
+      els.btnResetPreviewDefault.disabled = state.tuneScope !== "specific";
+    }
 
     toggleModeFields();
   }
@@ -620,32 +625,19 @@
       logEvent("Подожди: дата ещё загружается, сброс временно недоступен.");
       return;
     }
-    // Invalidate any in-flight load so a late response cannot repaint old data after reset.
-    scheduleLoadRequestSeq += 1;
-    clearAllScheduleLocalCaches();
+    if (!(state.tuneScope === "specific" && state.mode === "override")) {
+      logEvent("Кнопка доступна только для конкретной даты.");
+      renderAll();
+      return;
+    }
 
-    state.tuneScope = "weekdays";
-    state.mode = "override";
+    const d = new Date(`${state.date}T12:00:00`);
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    const targetScope = isWeekend ? "weekends" : "weekdays";
     state.tuneAdvancedOpen = false;
     state.calendarOpen = true;
-    state.date = todayISO();
-    state.weekday = String(new Date().getDay());
-    state.defaultNoticeMinutesGreen = 90;
-    state.defaultNoticeMinutesBlue = 0;
-    state.timezone = DEFAULT_TIMEZONE;
-    state.version = null;
-    state.source = "local";
-    state.lastLoadedFrom = "local";
-    state.lastSchedulePayload = null;
-    state.lastSaveMarker = null;
-    state.dayOff = false;
-    state.scheduleLoading = false;
-    state.segments = demoSegments({ green: 90, blue: 0 });
-    syncTuneBoundariesFromSegments();
-    hydrateControlsFromState();
-
-    logEvent("Сброшены все локальные таймлайны/шаблоны и выбор режима (без сохранения в n8n).");
-    renderAll();
+    logEvent(`Сброс к шаблону дня: ${isWeekend ? "выходные" : "будни"} (без удаления override и без сохранения).`);
+    void setTuneScope(targetScope);
   }
 
   function isRecentlySavedMarkerForDate(isoDate) {
