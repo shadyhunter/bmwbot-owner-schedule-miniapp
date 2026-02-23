@@ -245,8 +245,8 @@
     }
 
     if (els.btnResetPreviewDefault) {
-      els.btnResetPreviewDefault.addEventListener("click", () => {
-        resetTunePreviewToDefault();
+      els.btnResetPreviewDefault.addEventListener("click", async () => {
+        await resetTunePreviewToDefault();
       });
     }
 
@@ -620,7 +620,7 @@
     }
   }
 
-  function resetTunePreviewToDefault() {
+  async function resetTunePreviewToDefault() {
     if (state.tuneScope === "specific" && state.mode === "override" && state.scheduleLoading) {
       logEvent("Подожди: дата ещё загружается, сброс временно недоступен.");
       return;
@@ -631,13 +631,44 @@
       return;
     }
 
-    const d = new Date(`${state.date}T12:00:00`);
-    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-    const targetScope = isWeekend ? "weekends" : "weekdays";
+    const isoDate = String(state.date || "");
+    const templateInfo = getGroupTemplateSnapshotForDate(isoDate);
+    const isWeekend = !!templateInfo.weekend;
+    const targetScope = templateInfo.scope;
+
+    if (templateInfo.payload) {
+      const templateData = payloadData(templateInfo.payload);
+      if (templateData && typeof templateData === "object") {
+        const clonedTemplateData = JSON.parse(JSON.stringify(templateData));
+        clonedTemplateData.day_off = false;
+        applyLoadedSchedule(clonedTemplateData);
+      } else {
+        state.dayOff = false;
+        state.segments = demoSegments({
+          green: state.defaultNoticeMinutesGreen,
+          blue: 0,
+        });
+        syncTuneBoundariesFromSegments();
+      }
+    } else {
+      state.dayOff = false;
+      state.segments = demoSegments({
+        green: state.defaultNoticeMinutesGreen,
+        blue: 0,
+      });
+      syncTuneBoundariesFromSegments();
+    }
+
+    state.tuneScope = "specific";
+    state.mode = "override";
+    state.date = isoDate;
     state.tuneAdvancedOpen = false;
     state.calendarOpen = true;
     logEvent(`Сброс к шаблону дня: ${isWeekend ? "выходные" : "будни"} (без удаления override и без сохранения).`);
-    void setTuneScope(targetScope);
+    hydrateControlsFromState();
+    renderAll();
+    logEvent(`Template reset applied for date (${targetScope}); saving override...`);
+    await saveSchedule();
   }
 
   function isRecentlySavedMarkerForDate(isoDate) {
@@ -908,11 +939,20 @@
   }
 
   function resolveTuneCalendarRowSource(isoDate) {
+    const templateInfo = getGroupTemplateSnapshotForDate(isoDate);
     if (
       state.tuneScope === "specific"
       && state.date === isoDate
       && !(state.mode === "override" && state.scheduleLoading)
     ) {
+      const currentComparable = extractComparableScheduleState(buildPayload());
+      if (areComparableSchedulesEqual(currentComparable, templateInfo.comparable) && templateInfo.segments) {
+        return {
+          sourceKind: templateInfo.sourceKind,
+          segments: templateInfo.segments,
+          isDayOff: false,
+        };
+      }
       return {
         sourceKind: "override",
         segments: state.segments.slice(),
@@ -923,6 +963,14 @@
     const overridePayload = loadLocal(localKeyFor("override", isoDate, null));
     const overrideSegments = previewSegmentsFromPayload(overridePayload);
     if (overrideSegments) {
+      const overrideComparable = extractComparableScheduleState(overridePayload);
+      if (areComparableSchedulesEqual(overrideComparable, templateInfo.comparable) && templateInfo.segments) {
+        return {
+          sourceKind: templateInfo.sourceKind,
+          segments: templateInfo.segments,
+          isDayOff: false,
+        };
+      }
       return {
         sourceKind: "override",
         segments: overrideSegments,
@@ -930,14 +978,10 @@
       };
     }
 
-    const d = new Date(`${isoDate}T12:00:00`);
-    const weekend = d.getDay() === 0 || d.getDay() === 6;
-    const groupPayload = loadLocal(groupLocalKeyFor(weekend ? "weekends" : "weekdays"));
-    const groupSegments = previewSegmentsFromPayload(groupPayload);
-    if (groupSegments) {
+    if (templateInfo.segments) {
       return {
-        sourceKind: weekend ? "group-weekends" : "group-weekdays",
-        segments: groupSegments,
+        sourceKind: templateInfo.sourceKind,
+        segments: templateInfo.segments,
         isDayOff: false,
       };
     }
@@ -1031,6 +1075,27 @@
           ? clampInt(Number(seg.noticeMinutes ?? 0), 0, 24 * 60, 0)
           : 0,
       })),
+    };
+  }
+
+  function areComparableSchedulesEqual(a, b) {
+    if (!a || !b) return false;
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function getGroupTemplateSnapshotForDate(isoDate) {
+    const d = new Date(`${isoDate}T12:00:00`);
+    const weekend = d.getDay() === 0 || d.getDay() === 6;
+    const scope = weekend ? "weekends" : "weekdays";
+    const payload = loadLocal(groupLocalKeyFor(scope));
+    const segments = previewSegmentsFromPayload(payload);
+    return {
+      weekend,
+      scope,
+      sourceKind: weekend ? "group-weekends" : "group-weekdays",
+      payload,
+      segments,
+      comparable: extractComparableScheduleState(payload),
     };
   }
 
