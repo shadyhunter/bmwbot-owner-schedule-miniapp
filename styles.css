@@ -590,7 +590,7 @@ button.danger {
   border-radius: 10px;
   padding: 7px 8px;
   display: grid;
-  grid-template-columns: 108px 1fr auto;
+  grid-template-columns: 108px minmax(0, 1fr) 86px;
   align-items: center;
   gap: 8px;
   text-align: left;
@@ -661,6 +661,11 @@ button.danger {
   padding: 4px 6px;
   color: var(--muted);
   white-space: nowrap;
+  width: 86px;
+  text-align: center;
+  justify-self: end;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tune-calendar-tag.is-override {
@@ -1503,6 +1508,8 @@ input[type="range"] {
   }
 
   .tune-calendar-tag {
+    width: auto;
+    max-width: 100%;
     justify-self: start;
   }
 
