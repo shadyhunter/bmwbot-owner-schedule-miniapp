@@ -636,57 +636,54 @@
       renderAll();
       return;
     }
+    const currentIsoDate = String(state.date || "");
+    const dates = upcomingCalendarDates(14);
+    let ok = 0;
+    let failed = 0;
 
-    const isoDate = String(state.date || "");
-    const templateInfo = getGroupTemplateSnapshotForDate(isoDate);
-    const isWeekend = !!templateInfo.weekend;
-    const targetScope = templateInfo.scope;
-
-    if (templateInfo.payload) {
-      const templateData = payloadData(templateInfo.payload);
-      if (templateData && typeof templateData === "object") {
-        const clonedTemplateData = JSON.parse(JSON.stringify(templateData));
-        clonedTemplateData.day_off = false;
-        applyLoadedSchedule(clonedTemplateData);
-      } else {
-        state.dayOff = false;
-        state.segments = demoSegments({
-          green: state.defaultNoticeMinutesGreen,
-          blue: 0,
-        });
-        syncTuneBoundariesFromSegments();
+    logEvent("Reset default: applying weekday/weekend templates to next 14 days...");
+    for (const isoDate of dates) {
+      const templateInfo = getGroupTemplateSnapshotForDate(isoDate);
+      if (!templateInfo || !templateInfo.payload) {
+        failed += 1;
+        logEvent(`Reset default skipped ${isoDate}: template payload not found.`);
+        continue;
       }
-    } else {
-      state.dayOff = false;
-      state.segments = demoSegments({
-        green: state.defaultNoticeMinutesGreen,
-        blue: 0,
-      });
-      syncTuneBoundariesFromSegments();
+      try {
+        const overridePayload = buildOverridePayloadFromTemplatePayload(
+          templateInfo.payload,
+          isoDate,
+          templateInfo.scope
+        );
+        overridePayload.day_off = false;
+        overridePayload.day_status = "work";
+        await persistOverridePayloadForDate(overridePayload);
+        ok += 1;
+      } catch (err) {
+        failed += 1;
+        logEvent(`Reset default failed for ${isoDate}: ${safeErr(err)}`);
+      }
     }
 
     state.tuneScope = "specific";
     state.mode = "override";
-    state.date = isoDate;
+    state.date = currentIsoDate;
     state.tuneAdvancedOpen = false;
     state.calendarOpen = true;
-    logEvent(`Сброс к шаблону дня: ${isWeekend ? "выходные" : "будни"} (без удаления override и без сохранения).`);
     hydrateControlsFromState();
     renderAll();
-    logEvent(`Template reset applied for date (${targetScope}); saving override...`);
-    await saveSchedule();
-    if (templateInfo.comparable) {
-      try {
-        await loadSchedule();
-        const actualComparable = extractComparableScheduleState(buildPayload());
-        if (areComparableSchedulesEqual(actualComparable, templateInfo.comparable)) {
-          logEvent("Template apply verification OK: persisted date matches day template.");
-        } else {
-          logEvent("Template apply verification FAILED: loaded date differs after save.");
-        }
-      } catch (err) {
-        logEvent(`Template apply verification error: ${safeErr(err)}`);
-      }
+    logEvent(`Reset default finished: ${ok}/${dates.length} saved, failed=${failed}.`);
+
+    try {
+      await refreshCalendarBackendWindow({ force: true });
+    } catch (err) {
+      logEvent(`Reset default backend refresh warning: ${safeErr(err)}`);
+    }
+
+    try {
+      await loadSchedule();
+    } catch (err) {
+      logEvent(`Reset default reload warning: ${safeErr(err)}`);
     }
   }
 
@@ -940,7 +937,7 @@
     const dateShort = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
     let tag = source.sourceKind === "override"
-      ? "дата"
+      ? "custom"
       : (isWeekend ? "выходные" : "будни");
     if (source.isDayOff) tag = "выходной";
     if (isActive && !source.isDayOff) tag = "открыта";
@@ -982,6 +979,17 @@
 
     const backendRow = getCalendarBackendRow(isoDate);
     if (backendRow && Array.isArray(backendRow.segments) && backendRow.segments.length) {
+      if (
+        backendRow.comparable
+        && areComparableSchedulesEqual(backendRow.comparable, templateInfo.comparable)
+        && templateInfo.segments
+      ) {
+        return {
+          sourceKind: templateInfo.sourceKind,
+          segments: templateInfo.segments,
+          isDayOff: false,
+        };
+      }
       return {
         sourceKind: backendRow.sourceKind,
         segments: backendRow.segments,
@@ -1165,6 +1173,7 @@
       sourceKind: backendSourceKindForDate(String(data.source || ""), isoDate),
       isDayOff: readDayOffFromPayload(payload),
       segments: canonicalizeSegments(parsed, { OPEN_NOTICE: greenDefault, OPEN_APPROVAL: 0 }),
+      comparable: extractComparableScheduleState(payload),
       version: typeof data.version === "string" ? data.version : "",
       loadedAt: Date.now(),
     };
