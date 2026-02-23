@@ -468,7 +468,7 @@
       if (success) {
         btn.classList.add("is-reverted");
         if (!btn.hidden) {
-          btn.textContent = "Возвращено";
+          btn.textContent = "Вернуто";
         }
       } else if (btn.dataset.baseLabel) {
         btn.textContent = btn.dataset.baseLabel;
