@@ -11,19 +11,19 @@
 
   const ZONES = {
     OPEN_NOTICE: {
-      label: "Открыт (с предупреждением)",
+      label: "РћС‚РєСЂС‹С‚ (СЃ РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµРј)",
       className: "zone-open-notice",
-      note: "Можно подтверждать автоматически, если клиент предупредил заранее",
+      note: "РњРѕР¶РЅРѕ РїРѕРґС‚РІРµСЂР¶РґР°С‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё, РµСЃР»Рё РєР»РёРµРЅС‚ РїСЂРµРґСѓРїСЂРµРґРёР» Р·Р°СЂР°РЅРµРµ",
     },
     OPEN_APPROVAL: {
-      label: "Только по согласованию",
+      label: "РўРѕР»СЊРєРѕ РїРѕ СЃРѕРіР»Р°СЃРѕРІР°РЅРёСЋ",
       className: "zone-open-approval",
-      note: "Нужно спросить Коляна перед подтверждением",
+      note: "РќСѓР¶РЅРѕ СЃРїСЂРѕСЃРёС‚СЊ РљРѕР»СЏРЅР° РїРµСЂРµРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµРј",
     },
     CLOSED: {
-      label: "Закрыт",
+      label: "Р—Р°РєСЂС‹С‚",
       className: "zone-closed",
-      note: "Не подтверждаем визит, предлагаем другое время",
+      note: "РќРµ РїРѕРґС‚РІРµСЂР¶РґР°РµРј РІРёР·РёС‚, РїСЂРµРґР»Р°РіР°РµРј РґСЂСѓРіРѕРµ РІСЂРµРјСЏ",
     },
   };
 
@@ -134,24 +134,27 @@
   let scheduleLoadRequestSeq = 0;
   let calendarBackendRequestSeq = 0;
 
-  init();
+  void init();
 
-  function init() {
+  async function init() {
     initTelegram();
     bindTabNavigation();
     bindControls();
     renderHourAxis();
     hydrateControlsFromState();
-    setTuneScope("weekdays", { skipLoad: true, keepAdvancedState: true });
-    renderAll();
+    loadCalendarBackendCacheLocal();
+    if (getApiBase()) {
+      state.calendarBackendLoading = true;
+    }
+    await setTuneScope("weekdays", { skipLoad: true, keepAdvancedState: true });
     void loadSchedule();
     void refreshCalendarBackendWindow({ force: false });
   }
 
   function initTelegram() {
     if (!telegram) {
-      els.ownerIdentity.textContent = "Browser mode (без Telegram). Можно тестировать локально.";
-      logEvent("Telegram WebApp API не найден, работаем в browser mode.");
+      els.ownerIdentity.textContent = "Browser mode (Р±РµР· Telegram). РњРѕР¶РЅРѕ С‚РµСЃС‚РёСЂРѕРІР°С‚СЊ Р»РѕРєР°Р»СЊРЅРѕ.";
+      logEvent("Telegram WebApp API РЅРµ РЅР°Р№РґРµРЅ, СЂР°Р±РѕС‚Р°РµРј РІ browser mode.");
       return;
     }
 
@@ -162,24 +165,24 @@
         telegram.disableVerticalSwipes();
       }
     } catch (err) {
-      logEvent("Ошибка Telegram init: " + safeErr(err));
+      logEvent("РћС€РёР±РєР° Telegram init: " + safeErr(err));
     }
 
     const user = telegram.initDataUnsafe && telegram.initDataUnsafe.user ? telegram.initDataUnsafe.user : null;
     state.owner = user || null;
     const ownerLabel = user
       ? `Telegram: ${user.first_name || ""} ${user.last_name || ""} (@${user.username || "no_username"}, id=${user.id})`.trim()
-      : "Telegram user не определен";
+      : "Telegram user РЅРµ РѕРїСЂРµРґРµР»РµРЅ";
     els.ownerIdentity.textContent = ownerLabel;
 
     try {
       if (telegram.MainButton) {
-        telegram.MainButton.setText("Сохранить расписание");
+        telegram.MainButton.setText("РЎРѕС…СЂР°РЅРёС‚СЊ СЂР°СЃРїРёСЃР°РЅРёРµ");
         telegram.MainButton.onClick(saveSchedule);
         telegram.MainButton.show();
       }
     } catch (err) {
-      logEvent("Не удалось активировать MainButton: " + safeErr(err));
+      logEvent("РќРµ СѓРґР°Р»РѕСЃСЊ Р°РєС‚РёРІРёСЂРѕРІР°С‚СЊ MainButton: " + safeErr(err));
     }
   }
 
@@ -264,7 +267,7 @@
       if (state.tuneScope !== "specific") return;
       if (!state.dayOff) return;
       state.dayOff = false;
-      logEvent("Режим дня: рабочий.");
+      logEvent("Р РµР¶РёРј РґРЅСЏ: СЂР°Р±РѕС‡РёР№.");
       renderAll();
     });
 
@@ -272,7 +275,7 @@
       if (state.tuneScope !== "specific") return;
       if (state.dayOff) return;
       state.dayOff = true;
-      logEvent("Режим дня: выходной (override).");
+      logEvent("Р РµР¶РёРј РґРЅСЏ: РІС‹С…РѕРґРЅРѕР№ (override).");
       renderAll();
     });
 
@@ -281,7 +284,7 @@
         state.defaultNoticeMinutesGreen = clampInt(Number(els.simpleGreenNoticeInput.value), 0, 24 * 60, state.defaultNoticeMinutesGreen);
         state.defaultNoticeMinutesBlue = 0;
         applyGlobalZoneNoticesToSegments();
-        logEvent("Обновлено N для зелёной зоны.");
+        logEvent("РћР±РЅРѕРІР»РµРЅРѕ N РґР»СЏ Р·РµР»С‘РЅРѕР№ Р·РѕРЅС‹.");
         renderAll();
       });
     }
@@ -357,7 +360,7 @@
 
     els.btnNormalize.addEventListener("click", () => {
       state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
-      logEvent("Сегменты нормализованы.");
+      logEvent("РЎРµРіРјРµРЅС‚С‹ РЅРѕСЂРјР°Р»РёР·РѕРІР°РЅС‹.");
       renderAll();
     });
 
@@ -414,11 +417,11 @@
     }
 
     if (state.tuneScope === "weekdays") {
-      els.tuneScopeHint.textContent = "Общий шаблон для будних дней. Конкретные даты настраиваются через кнопку «Календарь».";
+      els.tuneScopeHint.textContent = "РћР±С‰РёР№ С€Р°Р±Р»РѕРЅ РґР»СЏ Р±СѓРґРЅРёС… РґРЅРµР№. РљРѕРЅРєСЂРµС‚РЅС‹Рµ РґР°С‚С‹ РЅР°СЃС‚СЂР°РёРІР°СЋС‚СЃСЏ С‡РµСЂРµР· РєРЅРѕРїРєСѓ В«РљР°Р»РµРЅРґР°СЂСЊВ».";
     } else if (state.tuneScope === "weekends") {
-      els.tuneScopeHint.textContent = "Общий шаблон для выходных дней. Конкретные даты настраиваются через кнопку «Календарь».";
+      els.tuneScopeHint.textContent = "РћР±С‰РёР№ С€Р°Р±Р»РѕРЅ РґР»СЏ РІС‹С…РѕРґРЅС‹С… РґРЅРµР№. РљРѕРЅРєСЂРµС‚РЅС‹Рµ РґР°С‚С‹ РЅР°СЃС‚СЂР°РёРІР°СЋС‚СЃСЏ С‡РµСЂРµР· РєРЅРѕРїРєСѓ В«РљР°Р»РµРЅРґР°СЂСЊВ».";
     } else {
-      els.tuneScopeHint.textContent = `Конкретная дата: ${formatIsoDate(state.date)}. Этот шаблон не перезаписывает общие «Будни/Выходные».`;
+      els.tuneScopeHint.textContent = `РљРѕРЅРєСЂРµС‚РЅР°СЏ РґР°С‚Р°: ${formatIsoDate(state.date)}. Р­С‚РѕС‚ С€Р°Р±Р»РѕРЅ РЅРµ РїРµСЂРµР·Р°РїРёСЃС‹РІР°РµС‚ РѕР±С‰РёРµ В«Р‘СѓРґРЅРё/Р’С‹С…РѕРґРЅС‹РµВ».`;
     }
 
     if (els.simpleGreenNoticeInput) {
@@ -428,12 +431,12 @@
     els.tuneCalendarPanel.hidden = false;
     els.tuneAdvancedPanel.hidden = !(state.tuneAdvancedOpen && state.tuneScope === "specific");
     els.btnToggleTuneAdvanced.hidden = true;
-    els.btnToggleTuneAdvanced.textContent = "Календарь";
+    els.btnToggleTuneAdvanced.textContent = "РљР°Р»РµРЅРґР°СЂСЊ";
     els.btnOpenAdvancedMini.hidden = state.tuneScope !== "specific";
     els.btnOpenAdvancedMini.classList.toggle("is-active", state.tuneAdvancedOpen && state.tuneScope === "specific");
     if (els.btnTemplatesMenuToggle) {
-      const templateLabel = state.templateScopeSelected === "weekends" ? "Выходные" : "Будни";
-      els.btnTemplatesMenuToggle.textContent = "Шаблоны";
+      const templateLabel = state.templateScopeSelected === "weekends" ? "Р’С‹С…РѕРґРЅС‹Рµ" : "Р‘СѓРґРЅРё";
+      els.btnTemplatesMenuToggle.textContent = "РЁР°Р±Р»РѕРЅС‹";
       els.btnTemplatesMenuToggle.setAttribute("aria-expanded", state.templatesMenuOpen ? "true" : "false");
       els.btnTemplatesMenuToggle.classList.toggle("is-active", state.templatesMenuOpen);
     }
@@ -452,8 +455,8 @@
     }
     if (els.btnResetPreviewDefault) {
       els.btnResetPreviewDefault.hidden = false;
-      els.btnResetPreviewDefault.title = "К шаблону дня";
-      els.btnResetPreviewDefault.setAttribute("aria-label", "К шаблону дня");
+      els.btnResetPreviewDefault.title = "Рљ С€Р°Р±Р»РѕРЅСѓ РґРЅСЏ";
+      els.btnResetPreviewDefault.setAttribute("aria-label", "Рљ С€Р°Р±Р»РѕРЅСѓ РґРЅСЏ");
     }
     if (els.timelineDayModeToggle) {
       const showDayMode = state.tuneScope === "specific";
@@ -516,7 +519,7 @@
       btn.classList.remove("is-saved");
       btn.classList.add("is-saving");
       if (!btn.hidden) {
-        btn.textContent = btn.id === "btnSave" ? "Сохраняю дату..." : "Сохраняю...";
+        btn.textContent = btn.id === "btnSave" ? "РЎРѕС…СЂР°РЅСЏСЋ РґР°С‚Сѓ..." : "РЎРѕС…СЂР°РЅСЏСЋ...";
       }
       btn.disabled = true;
     });
@@ -530,7 +533,7 @@
       if (success) {
         btn.classList.add("is-saved");
         if (!btn.hidden) {
-          btn.textContent = btn.id === "btnSave" ? "Сохранено" : "Сохранено";
+          btn.textContent = btn.id === "btnSave" ? "РЎРѕС…СЂР°РЅРµРЅРѕ" : "РЎРѕС…СЂР°РЅРµРЅРѕ";
         }
       } else if (btn.dataset.baseLabel) {
         btn.textContent = btn.dataset.baseLabel;
@@ -561,7 +564,7 @@
       btn.classList.remove("is-reverted");
       btn.classList.add("is-reverting");
       if (!btn.hidden) {
-        btn.textContent = "Возвращаю...";
+        btn.textContent = "Р’РѕР·РІСЂР°С‰Р°СЋ...";
       }
       btn.disabled = true;
     });
@@ -575,7 +578,7 @@
       if (success) {
         btn.classList.add("is-reverted");
         if (!btn.hidden) {
-          btn.textContent = "Вернуто";
+          btn.textContent = "Р’РµСЂРЅСѓС‚Рѕ";
         }
       } else if (btn.dataset.baseLabel) {
         btn.textContent = btn.dataset.baseLabel;
@@ -612,16 +615,16 @@
 
   async function revertUnsavedTuneChanges() {
     if (state.tuneScope === "specific" && state.mode === "override" && state.scheduleLoading) {
-      logEvent("Подожди: дата ещё загружается, откат временно недоступен.");
+      logEvent("РџРѕРґРѕР¶РґРё: РґР°С‚Р° РµС‰С‘ Р·Р°РіСЂСѓР¶Р°РµС‚СЃСЏ, РѕС‚РєР°С‚ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРµРЅ.");
       return;
     }
     startRevertButtonFx();
-    logEvent("Возврат к последней сохранённой версии (без сохранения текущих правок).");
+    logEvent("Р’РѕР·РІСЂР°С‚ Рє РїРѕСЃР»РµРґРЅРµР№ СЃРѕС…СЂР°РЅС‘РЅРЅРѕР№ РІРµСЂСЃРёРё (Р±РµР· СЃРѕС…СЂР°РЅРµРЅРёСЏ С‚РµРєСѓС‰РёС… РїСЂР°РІРѕРє).");
     try {
       await loadSchedule();
       finishRevertButtonFx(true);
     } catch (err) {
-      logEvent(`Не удалось вернуть сохранённую версию: ${safeErr(err)}`);
+      logEvent(`РќРµ СѓРґР°Р»РѕСЃСЊ РІРµСЂРЅСѓС‚СЊ СЃРѕС…СЂР°РЅС‘РЅРЅСѓСЋ РІРµСЂСЃРёСЋ: ${safeErr(err)}`);
       finishRevertButtonFx(false);
     }
   }
@@ -637,56 +640,71 @@
       return;
     }
 
-    const isoDate = String(state.date || "");
-    const templateInfo = getGroupTemplateSnapshotForDate(isoDate);
-    const isWeekend = !!templateInfo.weekend;
-    const targetScope = templateInfo.scope;
+    const currentIsoDate = String(state.date || "");
+    const dates = upcomingCalendarDates(14);
 
-    if (templateInfo.payload) {
-      const templateData = payloadData(templateInfo.payload);
-      if (templateData && typeof templateData === "object") {
-        const clonedTemplateData = JSON.parse(JSON.stringify(templateData));
-        clonedTemplateData.day_off = false;
-        applyLoadedSchedule(clonedTemplateData);
-      } else {
-        state.dayOff = false;
-        state.segments = demoSegments({
-          green: state.defaultNoticeMinutesGreen,
-          blue: 0,
-        });
-        syncTuneBoundariesFromSegments();
-      }
-    } else {
-      state.dayOff = false;
-      state.segments = demoSegments({
-        green: state.defaultNoticeMinutesGreen,
-        blue: 0,
-      });
-      syncTuneBoundariesFromSegments();
+    function buildFallbackTemplatePayload(scope) {
+      const green = clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90);
+      const fallbackSegments = demoSegments({ green, blue: 0 }).map((seg) => ({
+        zone: seg.zone,
+        start_min: seg.startSlot * SLOT_MINUTES,
+        end_min: seg.endSlot * SLOT_MINUTES,
+        notice_minutes: (seg.zone === "OPEN_NOTICE" || seg.zone === "OPEN_APPROVAL")
+          ? clampInt(
+              seg.noticeMinutes ?? (seg.zone === "OPEN_NOTICE" ? green : 0),
+              0,
+              24 * 60,
+              seg.zone === "OPEN_NOTICE" ? green : 0
+            )
+          : null,
+      }));
+      return {
+        version: new Date().toISOString(),
+        timezone: state.timezone || DEFAULT_TIMEZONE,
+        mode: "group",
+        tune_scope: scope,
+        default_notice_minutes: green,
+        default_notice_minutes_green: green,
+        default_notice_minutes_blue: 0,
+        zone_notice_defaults: { OPEN_NOTICE: green, OPEN_APPROVAL: 0 },
+        day_off: false,
+        day_status: "work",
+        segments: fallbackSegments,
+      };
     }
 
+    let ok = 0;
+    let failed = 0;
+    for (const isoDate of dates) {
+      const templateInfo = getGroupTemplateSnapshotForDate(isoDate);
+      const baseTemplatePayload = templateInfo.payload || buildFallbackTemplatePayload(templateInfo.scope);
+      const overridePayload = buildOverridePayloadFromTemplatePayload(baseTemplatePayload, isoDate, templateInfo.scope);
+      overridePayload.day_off = false;
+      overridePayload.day_status = "work";
+      overridePayload.comment = "reset-to-template:bulk14";
+      try {
+        await persistOverridePayloadForDate(overridePayload);
+        ok += 1;
+      } catch (err) {
+        failed += 1;
+        logEvent(`Reset-to-template failed for ${isoDate}: ${safeErr(err)}`);
+      }
+    }
+
+    state.dayOff = false;
     state.tuneScope = "specific";
     state.mode = "override";
-    state.date = isoDate;
+    state.date = currentIsoDate;
     state.tuneAdvancedOpen = false;
     state.calendarOpen = true;
-    logEvent(`Сброс к шаблону дня: ${isWeekend ? "выходные" : "будни"} (без удаления override и без сохранения).`);
     hydrateControlsFromState();
-    renderAll();
-    logEvent(`Template reset applied for date (${targetScope}); saving override...`);
-    await saveSchedule();
-    if (templateInfo.comparable) {
-      try {
-        await loadSchedule();
-        const actualComparable = extractComparableScheduleState(buildPayload());
-        if (areComparableSchedulesEqual(actualComparable, templateInfo.comparable)) {
-          logEvent("Template apply verification OK: persisted date matches day template.");
-        } else {
-          logEvent("Template apply verification FAILED: loaded date differs after save.");
-        }
-      } catch (err) {
-        logEvent(`Template apply verification error: ${safeErr(err)}`);
-      }
+    markScheduleSaved();
+    logEvent(`Сброс к шаблонам выполнен для 14 дней: ${ok}/${dates.length}${failed ? `, ошибок: ${failed}` : ""}.`);
+    try {
+      await loadSchedule();
+    } catch (err) {
+      logEvent(`Reload after reset-to-template failed: ${safeErr(err)}`);
+      renderAll();
     }
   }
 
@@ -833,11 +851,11 @@
     return;
 
     const zones = [
-      ["red", "Красная", 0, b1],
-      ["blue", "Синяя", b1, b2],
-      ["green", "Зелёная", b2, b3],
-      ["blue", "Синяя", b3, b4],
-      ["red", "Красная", b4, SLOTS_PER_DAY],
+      ["red", "РљСЂР°СЃРЅР°СЏ", 0, b1],
+      ["blue", "РЎРёРЅСЏСЏ", b1, b2],
+      ["green", "Р—РµР»С‘РЅР°СЏ", b2, b3],
+      ["blue", "РЎРёРЅСЏСЏ", b3, b4],
+      ["red", "РљСЂР°СЃРЅР°СЏ", b4, SLOTS_PER_DAY],
     ];
     els.boundarySummary.innerHTML = "";
     zones.forEach(([tone, label, start, end]) => {
@@ -853,6 +871,16 @@
     if (!els.tuneCalendarPanel || !els.tuneCalendarList) return;
     if (!state.calendarOpen) {
       els.tuneCalendarList.innerHTML = "";
+      return;
+    }
+    const apiBase = getApiBase();
+    const backendCacheCount = state.calendarBackendCache ? Object.keys(state.calendarBackendCache).length : 0;
+    if (apiBase && backendCacheCount === 0 && (state.calendarBackendLoading || !state.calendarBackendLoadedAt)) {
+      els.tuneCalendarList.innerHTML = "";
+      if (els.tuneCalendarMeta) {
+        els.tuneCalendarMeta.textContent = "Р—Р°РіСЂСѓР·РєР° Р°РєС‚СѓР°Р»СЊРЅС‹С… РїСЂРµРІСЊСЋ СЃ СЃРµСЂРІРµСЂР°...";
+      }
+      void refreshCalendarBackendWindow({ force: false });
       return;
     }
     void refreshCalendarBackendWindow({ force: false });
@@ -909,7 +937,7 @@
     });
 
     if (els.tuneCalendarMeta) {
-      els.tuneCalendarMeta.textContent = "Следующие 14 дней. Нажми строку, чтобы открыть редактирование конкретной даты.";
+      els.tuneCalendarMeta.textContent = "РЎР»РµРґСѓСЋС‰РёРµ 14 РґРЅРµР№. РќР°Р¶РјРё СЃС‚СЂРѕРєСѓ, С‡С‚РѕР±С‹ РѕС‚РєСЂС‹С‚СЊ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РєРѕРЅРєСЂРµС‚РЅРѕР№ РґР°С‚С‹.";
     }
   }
 
@@ -940,11 +968,11 @@
     const dateShort = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
     let tag = source.sourceKind === "override"
-      ? "дата"
-      : (isWeekend ? "выходные" : "будни");
-    if (source.isDayOff) tag = "выходной";
-    if (isActive && !source.isDayOff) tag = "открыта";
-    if (isRecentlySavedMarkerForDate(isoDate)) tag = "сохранено";
+      ? "РґР°С‚Р°"
+      : (isWeekend ? "РІС‹С…РѕРґРЅС‹Рµ" : "Р±СѓРґРЅРё");
+    if (source.isDayOff) tag = "РІС‹С…РѕРґРЅРѕР№";
+    if (isActive && !source.isDayOff) tag = "РѕС‚РєСЂС‹С‚Р°";
+    if (isRecentlySavedMarkerForDate(isoDate)) tag = "СЃРѕС…СЂР°РЅРµРЅРѕ";
     return {
       isoDate,
       isActive,
@@ -1203,6 +1231,7 @@
       }
       state.calendarBackendCache = next;
       state.calendarBackendLoadedAt = Date.now();
+      saveCalendarBackendCacheLocal();
       renderTuneCalendarPanel();
     } catch (err) {
       logEvent(`Calendar backend refresh failed: ${safeErr(err)}`);
@@ -1228,12 +1257,12 @@
     if (!(state.tuneScope === "specific" && state.mode === "override")) return false;
     if (state.scheduleLoading) return false;
     if (!isCurrentSpecificDateDirty()) return false;
-    logEvent(`Автосохранение даты перед переходом (${reason || "switch"}).`);
+    logEvent(`РђРІС‚РѕСЃРѕС…СЂР°РЅРµРЅРёРµ РґР°С‚С‹ РїРµСЂРµРґ РїРµСЂРµС…РѕРґРѕРј (${reason || "switch"}).`);
     try {
       await saveSchedule();
       return true;
     } catch (err) {
-      logEvent(`Ошибка автосохранения даты: ${safeErr(err)}`);
+      logEvent(`РћС€РёР±РєР° Р°РІС‚РѕСЃРѕС…СЂР°РЅРµРЅРёСЏ РґР°С‚С‹: ${safeErr(err)}`);
       return false;
     }
   }
@@ -1420,14 +1449,14 @@
     try {
       if (telegram && telegram.MainButton) {
         if (state.activeTab === "tune") {
-          telegram.MainButton.setText("Сохранить расписание");
+          telegram.MainButton.setText("РЎРѕС…СЂР°РЅРёС‚СЊ СЂР°СЃРїРёСЃР°РЅРёРµ");
           telegram.MainButton.show();
         } else {
           telegram.MainButton.hide();
         }
       }
     } catch (err) {
-      logEvent("Ошибка обновления MainButton: " + safeErr(err));
+      logEvent("РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ MainButton: " + safeErr(err));
     }
   }
 
@@ -1446,7 +1475,7 @@
     applyGlobalZoneNoticesToSegments();
     syncTuneBoundariesFromSegments();
     closeSettingsModal();
-    logEvent("Обновлено глобальное N для зеленой зоны.");
+    logEvent("РћР±РЅРѕРІР»РµРЅРѕ РіР»РѕР±Р°Р»СЊРЅРѕРµ N РґР»СЏ Р·РµР»РµРЅРѕР№ Р·РѕРЅС‹.");
     renderAll();
   }
 
@@ -1501,13 +1530,13 @@
           blue: 0,
         });
         syncTuneBoundariesFromSegments();
-        logEvent(`Нет сохранённых данных для ${state.tuneScope === "weekdays" ? "будней" : "выходных"}, использован базовый шаблон.`);
+        logEvent(`РќРµС‚ СЃРѕС…СЂР°РЅС‘РЅРЅС‹С… РґР°РЅРЅС‹С… РґР»СЏ ${state.tuneScope === "weekdays" ? "Р±СѓРґРЅРµР№" : "РІС‹С…РѕРґРЅС‹С…"}, РёСЃРїРѕР»СЊР·РѕРІР°РЅ Р±Р°Р·РѕРІС‹Р№ С€Р°Р±Р»РѕРЅ.`);
         renderAll();
         return;
       }
       state.scheduleLoading = false;
       applyLoadedSchedule(loadedGroup);
-      logEvent(`Загружено локально (${state.tuneScope}): ${state.segments.length} сегм.`);
+      logEvent(`Р—Р°РіСЂСѓР¶РµРЅРѕ Р»РѕРєР°Р»СЊРЅРѕ (${state.tuneScope}): ${state.segments.length} СЃРµРіРј.`);
       syncTuneBoundariesFromSegments();
       renderAll();
       return;
@@ -1520,7 +1549,7 @@
       : `weekday=${encodeURIComponent(state.weekday)}`;
     const url = `${apiBase ? apiBase.replace(/\/$/, "") : ""}/schedule?mode=${encodeURIComponent(state.mode)}&${target}`;
 
-    logEvent(`Загрузка расписания (${state.mode})...`);
+    logEvent(`Р—Р°РіСЂСѓР·РєР° СЂР°СЃРїРёСЃР°РЅРёСЏ (${state.mode})...`);
 
     let loaded = null;
     const preloadedLocal = loadLocal(key);
@@ -1540,7 +1569,7 @@
         state.lastLoadedFrom = "api";
       } catch (err) {
         if (isStaleScheduleLoad(requestId, requestCtx)) return;
-        logEvent(`API недоступен, fallback на localStorage: ${safeErr(err)}`);
+        logEvent(`API РЅРµРґРѕСЃС‚СѓРїРµРЅ, fallback РЅР° localStorage: ${safeErr(err)}`);
       }
     }
 
@@ -1550,7 +1579,7 @@
       loaded = preloadedLocal;
       state.source = "local";
       state.lastLoadedFrom = "local";
-      logEvent("Оставлена локальная версия даты (API вернул не-override или более старую версию).");
+      logEvent("РћСЃС‚Р°РІР»РµРЅР° Р»РѕРєР°Р»СЊРЅР°СЏ РІРµСЂСЃРёСЏ РґР°С‚С‹ (API РІРµСЂРЅСѓР» РЅРµ-override РёР»Рё Р±РѕР»РµРµ СЃС‚Р°СЂСѓСЋ РІРµСЂСЃРёСЋ).");
     }
 
     if (!loaded) {
@@ -1568,14 +1597,14 @@
         blue: 0,
       });
       syncTuneBoundariesFromSegments();
-      logEvent("Данных не найдено, подставлен demo-шаблон.");
+      logEvent("Р”Р°РЅРЅС‹С… РЅРµ РЅР°Р№РґРµРЅРѕ, РїРѕРґСЃС‚Р°РІР»РµРЅ demo-С€Р°Р±Р»РѕРЅ.");
       renderAll();
       return;
     }
 
     state.scheduleLoading = false;
     applyLoadedSchedule(loaded);
-    logEvent(`Загружено (${state.lastLoadedFrom}): ${state.segments.length} сегм.`);
+    logEvent(`Р—Р°РіСЂСѓР¶РµРЅРѕ (${state.lastLoadedFrom}): ${state.segments.length} СЃРµРіРј.`);
     renderAll();
   }
 
@@ -1619,7 +1648,7 @@
 
   async function saveSchedule() {
     if (state.tuneScope === "specific" && state.mode === "override" && state.scheduleLoading) {
-      logEvent("Подожди: дата ещё загружается. Сохранение заблокировано до завершения загрузки.");
+      logEvent("РџРѕРґРѕР¶РґРё: РґР°С‚Р° РµС‰С‘ Р·Р°РіСЂСѓР¶Р°РµС‚СЃСЏ. РЎРѕС…СЂР°РЅРµРЅРёРµ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅРѕ РґРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ Р·Р°РіСЂСѓР·РєРё.");
       return;
     }
     startSaveButtonFx();
@@ -1637,14 +1666,14 @@
       if (propagated && propagated.total > 0) {
         logEvent(`Template propagated to next 14 days: ${propagated.ok}/${propagated.total}.`);
       }
-      logEvent(`Сохранено локально (${state.tuneScope === "weekdays" ? "будни" : "выходные"}).`);
+      logEvent(`РЎРѕС…СЂР°РЅРµРЅРѕ Р»РѕРєР°Р»СЊРЅРѕ (${state.tuneScope === "weekdays" ? "Р±СѓРґРЅРё" : "РІС‹С…РѕРґРЅС‹Рµ"}).`);
       finishSaveButtonFx(true);
       renderAll();
       return;
     }
     const apiBase = getApiBase();
 
-    logEvent(`Сохранение расписания (${state.mode})...`);
+    logEvent(`РЎРѕС…СЂР°РЅРµРЅРёРµ СЂР°СЃРїРёСЃР°РЅРёСЏ (${state.mode})...`);
 
     if (apiBase) {
       try {
@@ -1658,12 +1687,12 @@
         persistLocalMirrorAndVerify(payload);
         markScheduleSaved();
         applyPostSuccessfulSaveUi();
-        logEvent("Сохранено через API.");
+        logEvent("РЎРѕС…СЂР°РЅРµРЅРѕ С‡РµСЂРµР· API.");
         finishSaveButtonFx(true);
         renderAll();
         return;
       } catch (err) {
-        logEvent(`Ошибка API save, fallback в localStorage: ${safeErr(err)}`);
+        logEvent(`РћС€РёР±РєР° API save, fallback РІ localStorage: ${safeErr(err)}`);
       }
     }
 
@@ -1672,7 +1701,7 @@
     state.version = payload.version;
     markScheduleSaved();
     applyPostSuccessfulSaveUi();
-    logEvent("Сохранено локально (localStorage).");
+    logEvent("РЎРѕС…СЂР°РЅРµРЅРѕ Р»РѕРєР°Р»СЊРЅРѕ (localStorage).");
     finishSaveButtonFx(true);
     renderAll();
   }
@@ -1684,7 +1713,7 @@
     const version = stored && (stored.version || (stored.data && stored.data.version));
     const ok = !!stored && version === payload.version;
     if (!ok) {
-      logEvent("Предупреждение: локальная проверка сохранения не прошла.");
+      logEvent("РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ: Р»РѕРєР°Р»СЊРЅР°СЏ РїСЂРѕРІРµСЂРєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ РЅРµ РїСЂРѕС€Р»Р°.");
     }
     return ok;
   }
@@ -1866,11 +1895,11 @@
   function renderTimeline() {
     if (els.tuneTimelineTitle) {
       if (state.tuneScope === "specific") {
-        els.tuneTimelineTitle.textContent = `Таймлайн дня (дата: ${formatIsoDate(state.date)})`;
+        els.tuneTimelineTitle.textContent = `РўР°Р№РјР»Р°Р№РЅ РґРЅСЏ (РґР°С‚Р°: ${formatIsoDate(state.date)})`;
       } else if (state.tuneScope === "weekends") {
-        els.tuneTimelineTitle.textContent = "Таймлайн дня - шаблон ВЫХОДНЫЕ";
+        els.tuneTimelineTitle.textContent = "РўР°Р№РјР»Р°Р№РЅ РґРЅСЏ - С€Р°Р±Р»РѕРЅ Р’Р«РҐРћР”РќР«Р•";
       } else {
-        els.tuneTimelineTitle.textContent = "Таймлайн дня - шаблон БУДНИ";
+        els.tuneTimelineTitle.textContent = "РўР°Р№РјР»Р°Р№РЅ РґРЅСЏ - С€Р°Р±Р»РѕРЅ Р‘РЈР”РќР";
       }
     }
     const slotMap = expandToSlots(state.segments, getZoneNoticeDefaults());
@@ -1940,7 +1969,7 @@
     if (!state.segments.length) {
       const p = document.createElement("p");
       p.className = "muted";
-      p.textContent = "Сегментов нет.";
+      p.textContent = "РЎРµРіРјРµРЅС‚РѕРІ РЅРµС‚.";
       els.segmentsList.appendChild(p);
       return;
     }
@@ -1980,7 +2009,7 @@
       noticeInput.disabled = true;
 
       const durationMin = (segment.endSlot - segment.startSlot) * SLOT_MINUTES;
-      durationChip.textContent = `${durationMin} мин (${formatDuration(durationMin)})`;
+      durationChip.textContent = `${durationMin} РјРёРЅ (${formatDuration(durationMin)})`;
       noteChip.textContent = zoneMeta.note;
 
       zoneSelect.addEventListener("change", () => {
@@ -2013,7 +2042,7 @@
       removeBtn.addEventListener("click", () => {
         state.segments.splice(index, 1);
         state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
-        logEvent(`Удален сегмент #${index + 1}.`);
+        logEvent(`РЈРґР°Р»РµРЅ СЃРµРіРјРµРЅС‚ #${index + 1}.`);
         renderAll();
       });
 
@@ -2051,24 +2080,24 @@
       noticeMinutes: getDefaultNoticeForZone("OPEN_NOTICE") ?? 0,
     };
     state.segments = canonicalizeSegments(state.segments.concat(candidate), getZoneNoticeDefaults());
-    logEvent("Добавлен сегмент OPEN_NOTICE (10:00-18:00).");
+    logEvent("Р”РѕР±Р°РІР»РµРЅ СЃРµРіРјРµРЅС‚ OPEN_NOTICE (10:00-18:00).");
     renderAll();
   }
 
   function copyPreviousDayLocal() {
     if (state.mode !== "override") {
-      logEvent("Копирование вчера работает только в режиме конкретной даты.");
+      logEvent("РљРѕРїРёСЂРѕРІР°РЅРёРµ РІС‡РµСЂР° СЂР°Р±РѕС‚Р°РµС‚ С‚РѕР»СЊРєРѕ РІ СЂРµР¶РёРјРµ РєРѕРЅРєСЂРµС‚РЅРѕР№ РґР°С‚С‹.");
       return;
     }
     const prevKey = localKeyFor("override", addDaysISO(state.date, -1), null);
     const prev = loadLocal(prevKey);
     if (!prev) {
-      logEvent("В localStorage нет сохраненного расписания за предыдущий день.");
+      logEvent("Р’ localStorage РЅРµС‚ СЃРѕС…СЂР°РЅРµРЅРЅРѕРіРѕ СЂР°СЃРїРёСЃР°РЅРёСЏ Р·Р° РїСЂРµРґС‹РґСѓС‰РёР№ РґРµРЅСЊ.");
       return;
     }
     applyLoadedSchedule(prev);
     state.source = "local";
-    logEvent(`Скопировано локально из ${addDaysISO(state.date, -1)}.`);
+    logEvent(`РЎРєРѕРїРёСЂРѕРІР°РЅРѕ Р»РѕРєР°Р»СЊРЅРѕ РёР· ${addDaysISO(state.date, -1)}.`);
     renderAll();
   }
 
@@ -2121,60 +2150,60 @@
       arrivals: [
         {
           time: times[0],
-          title: "Алексей / F10 — установка комплекта",
-          subtitle: "Подтвержден, приедет с предупреждением",
-          statusLabel: "Подтвержден",
+          title: "РђР»РµРєСЃРµР№ / F10 вЂ” СѓСЃС‚Р°РЅРѕРІРєР° РєРѕРјРїР»РµРєС‚Р°",
+          subtitle: "РџРѕРґС‚РІРµСЂР¶РґРµРЅ, РїСЂРёРµРґРµС‚ СЃ РїСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµРј",
+          statusLabel: "РџРѕРґС‚РІРµСЂР¶РґРµРЅ",
           statusTone: "ok",
         },
         {
           time: times[1],
-          title: "Игорь / E70 — самовывоз детали",
-          subtitle: "Нужно проверить остаток (1 шт на складе)",
-          statusLabel: "Уточнить у Коли",
+          title: "РРіРѕСЂСЊ / E70 вЂ” СЃР°РјРѕРІС‹РІРѕР· РґРµС‚Р°Р»Рё",
+          subtitle: "РќСѓР¶РЅРѕ РїСЂРѕРІРµСЂРёС‚СЊ РѕСЃС‚Р°С‚РѕРє (1 С€С‚ РЅР° СЃРєР»Р°РґРµ)",
+          statusLabel: "РЈС‚РѕС‡РЅРёС‚СЊ Сѓ РљРѕР»Рё",
           statusTone: "warn",
         },
         {
           time: times[2],
-          title: "Роман / F30 — вопрос по установке",
-          subtitle: "Рекомендуется fallback в Telegram",
-          statusLabel: "Согласование",
+          title: "Р РѕРјР°РЅ / F30 вЂ” РІРѕРїСЂРѕСЃ РїРѕ СѓСЃС‚Р°РЅРѕРІРєРµ",
+          subtitle: "Р РµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ fallback РІ Telegram",
+          statusLabel: "РЎРѕРіР»Р°СЃРѕРІР°РЅРёРµ",
           statusTone: "warn",
         },
         {
           time: times[3],
-          title: "Окно под запись",
-          subtitle: "Можно занять под срочный приезд",
-          statusLabel: "Свободно",
+          title: "РћРєРЅРѕ РїРѕРґ Р·Р°РїРёСЃСЊ",
+          subtitle: "РњРѕР¶РЅРѕ Р·Р°РЅСЏС‚СЊ РїРѕРґ СЃСЂРѕС‡РЅС‹Р№ РїСЂРёРµР·Рґ",
+          statusLabel: "РЎРІРѕР±РѕРґРЅРѕ",
           statusTone: "ok",
         },
       ],
       parts: [
         {
           qty: 1,
-          title: "КОМПЛЕКТ F10 передние черные",
-          subtitle: "Клиент: Игорь, ориентир " + times[1],
-          statusLabel: "Проверить остаток",
+          title: "РљРћРњРџР›Р•РљРў F10 РїРµСЂРµРґРЅРёРµ С‡РµСЂРЅС‹Рµ",
+          subtitle: "РљР»РёРµРЅС‚: РРіРѕСЂСЊ, РѕСЂРёРµРЅС‚РёСЂ " + times[1],
+          statusLabel: "РџСЂРѕРІРµСЂРёС‚СЊ РѕСЃС‚Р°С‚РѕРє",
           statusTone: "warn",
         },
         {
           qty: 2,
-          title: "Кнопка руля F10 (левая/правая)",
-          subtitle: "Под выдачу и фото-подтверждение",
-          statusLabel: "Готово",
+          title: "РљРЅРѕРїРєР° СЂСѓР»СЏ F10 (Р»РµРІР°СЏ/РїСЂР°РІР°СЏ)",
+          subtitle: "РџРѕРґ РІС‹РґР°С‡Сѓ Рё С„РѕС‚Рѕ-РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ",
+          statusLabel: "Р“РѕС‚РѕРІРѕ",
           statusTone: "ok",
         },
         {
           qty: 1,
-          title: "Селектор E70 (карбон)",
-          subtitle: "Клиент спрашивал совместимость",
-          statusLabel: "Нужна консультация",
+          title: "РЎРµР»РµРєС‚РѕСЂ E70 (РєР°СЂР±РѕРЅ)",
+          subtitle: "РљР»РёРµРЅС‚ СЃРїСЂР°С€РёРІР°Р» СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ",
+          statusLabel: "РќСѓР¶РЅР° РєРѕРЅСЃСѓР»СЊС‚Р°С†РёСЏ",
           statusTone: "warn",
         },
       ],
       notes: [
-        "Если вопрос про установку/комплектацию — эскалировать в Telegram.",
-        "Остаток = 1: не подтверждать автоматически без Коли.",
-        "Фото лучше отправлять из каталога модели, top-2.",
+        "Р•СЃР»Рё РІРѕРїСЂРѕСЃ РїСЂРѕ СѓСЃС‚Р°РЅРѕРІРєСѓ/РєРѕРјРїР»РµРєС‚Р°С†РёСЋ вЂ” СЌСЃРєР°Р»РёСЂРѕРІР°С‚СЊ РІ Telegram.",
+        "РћСЃС‚Р°С‚РѕРє = 1: РЅРµ РїРѕРґС‚РІРµСЂР¶РґР°С‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё Р±РµР· РљРѕР»Рё.",
+        "Р¤РѕС‚Рѕ Р»СѓС‡С€Рµ РѕС‚РїСЂР°РІР»СЏС‚СЊ РёР· РєР°С‚Р°Р»РѕРіР° РјРѕРґРµР»Рё, top-2.",
       ],
       openWindows,
     };
@@ -2214,9 +2243,9 @@
     if (!raw || typeof raw !== "object") return null;
     return {
       time: typeof raw.time === "string" ? raw.time : "00:00",
-      title: String(raw.title || raw.customer || "Клиент"),
+      title: String(raw.title || raw.customer || "РљР»РёРµРЅС‚"),
       subtitle: String(raw.subtitle || raw.note || ""),
-      statusLabel: String(raw.statusLabel || raw.status || "Без статуса"),
+      statusLabel: String(raw.statusLabel || raw.status || "Р‘РµР· СЃС‚Р°С‚СѓСЃР°"),
       statusTone: normalizeStatusTone(raw.statusTone || raw.status),
     };
   }
@@ -2225,9 +2254,9 @@
     if (!raw || typeof raw !== "object") return null;
     return {
       qty: Math.max(0, Number(raw.qty) || 0),
-      title: String(raw.title || raw.name || "Деталь"),
+      title: String(raw.title || raw.name || "Р”РµС‚Р°Р»СЊ"),
       subtitle: String(raw.subtitle || raw.note || ""),
-      statusLabel: String(raw.statusLabel || raw.status || "Без статуса"),
+      statusLabel: String(raw.statusLabel || raw.status || "Р‘РµР· СЃС‚Р°С‚СѓСЃР°"),
       statusTone: normalizeStatusTone(raw.statusTone || raw.status),
     };
   }
@@ -2240,7 +2269,7 @@
   }
 
   function renderTodayArrivalsTab(snapshot) {
-    els.todayArrivalsMeta.textContent = `${formatIsoDate(snapshot.date)} • ${snapshot.arrivals.length} записей • источник: ${snapshot.source}`;
+    els.todayArrivalsMeta.textContent = `${formatIsoDate(snapshot.date)} вЂў ${snapshot.arrivals.length} Р·Р°РїРёСЃРµР№ вЂў РёСЃС‚РѕС‡РЅРёРє: ${snapshot.source}`;
     renderList(
       els.todayArrivalsList,
       snapshot.arrivals.map((item) => ({
@@ -2250,12 +2279,12 @@
         statusLabel: item.statusLabel,
         statusTone: item.statusTone,
       })),
-      "На сегодня записей пока нет"
+      "РќР° СЃРµРіРѕРґРЅСЏ Р·Р°РїРёСЃРµР№ РїРѕРєР° РЅРµС‚"
     );
   }
 
   function renderTodayPartsTab(snapshot) {
-    els.todayPartsMeta.textContent = `${formatIsoDate(snapshot.date)} • ${snapshot.summary.partsLinesCount} позиций • всего штук: ${snapshot.summary.totalPartsQty}`;
+    els.todayPartsMeta.textContent = `${formatIsoDate(snapshot.date)} вЂў ${snapshot.summary.partsLinesCount} РїРѕР·РёС†РёР№ вЂў РІСЃРµРіРѕ С€С‚СѓРє: ${snapshot.summary.totalPartsQty}`;
     renderList(
       els.todayPartsList,
       snapshot.parts.map((item) => ({
@@ -2265,42 +2294,42 @@
         statusLabel: item.statusLabel,
         statusTone: item.statusTone,
       })),
-      "На сегодня детали еще не сформированы"
+      "РќР° СЃРµРіРѕРґРЅСЏ РґРµС‚Р°Р»Рё РµС‰Рµ РЅРµ СЃС„РѕСЂРјРёСЂРѕРІР°РЅС‹"
     );
   }
 
   function renderTodaySummaryTab(snapshot) {
-    els.todaySummaryMeta.textContent = `${formatIsoDate(snapshot.date)} • источник: ${snapshot.source}`;
+    els.todaySummaryMeta.textContent = `${formatIsoDate(snapshot.date)} вЂў РёСЃС‚РѕС‡РЅРёРє: ${snapshot.source}`;
     renderKpis(els.todaySummaryKpis, [
-      { label: "Записи", value: String(snapshot.summary.arrivalsCount) },
-      { label: "Детали (строки)", value: String(snapshot.summary.partsLinesCount) },
-      { label: "Штук деталей", value: String(snapshot.summary.totalPartsQty) },
-      { label: "Требуют внимания", value: String(snapshot.summary.approvalsCount) },
-      { label: "Окон работы", value: String(snapshot.summary.openWindowsCount) },
-      { label: "Открыто минут", value: String(snapshot.summary.openMinutes) },
+      { label: "Р—Р°РїРёСЃРё", value: String(snapshot.summary.arrivalsCount) },
+      { label: "Р”РµС‚Р°Р»Рё (СЃС‚СЂРѕРєРё)", value: String(snapshot.summary.partsLinesCount) },
+      { label: "РЁС‚СѓРє РґРµС‚Р°Р»РµР№", value: String(snapshot.summary.totalPartsQty) },
+      { label: "РўСЂРµР±СѓСЋС‚ РІРЅРёРјР°РЅРёСЏ", value: String(snapshot.summary.approvalsCount) },
+      { label: "РћРєРѕРЅ СЂР°Р±РѕС‚С‹", value: String(snapshot.summary.openWindowsCount) },
+      { label: "РћС‚РєСЂС‹С‚Рѕ РјРёРЅСѓС‚", value: String(snapshot.summary.openMinutes) },
     ]);
 
     renderList(
       els.todayOpenWindowsList,
       snapshot.openWindows.map((w) => ({
-        time: `${w.start}–${w.end}`,
+        time: `${w.start}вЂ“${w.end}`,
         title: w.title,
         subtitle: w.subtitle,
         statusLabel: w.statusLabel,
         statusTone: w.statusTone,
         compact: true,
       })),
-      "Окон работы нет (день закрыт)"
+      "РћРєРѕРЅ СЂР°Р±РѕС‚С‹ РЅРµС‚ (РґРµРЅСЊ Р·Р°РєСЂС‹С‚)"
     );
 
     const notesItems = (snapshot.notes || []).map((note, idx) => ({
-      title: `Пункт ${idx + 1}`,
+      title: `РџСѓРЅРєС‚ ${idx + 1}`,
       subtitle: note,
-      statusLabel: "Фокус",
+      statusLabel: "Р¤РѕРєСѓСЃ",
       statusTone: "warn",
       twoCol: true,
     }));
-    renderList(els.todaySummaryNotes, notesItems, "Пока без заметок");
+    renderList(els.todaySummaryNotes, notesItems, "РџРѕРєР° Р±РµР· Р·Р°РјРµС‚РѕРє");
   }
 
   function renderKpis(container, kpis) {
@@ -2372,17 +2401,17 @@
       const start = slotToTime(segment.startSlot);
       const end = slotToTime(segment.endSlot);
       const durationMin = Math.max(0, (segment.endSlot - segment.startSlot) * SLOT_MINUTES);
-      const zoneLabel = segment.zone === "OPEN_NOTICE" ? "Зеленая зона" : "Синяя зона";
+      const zoneLabel = segment.zone === "OPEN_NOTICE" ? "Р—РµР»РµРЅР°СЏ Р·РѕРЅР°" : "РЎРёРЅСЏСЏ Р·РѕРЅР°";
       const notice = segment.zone === "OPEN_NOTICE"
-        ? `N=${getDefaultNoticeForZone("OPEN_NOTICE")} мин`
-        : `N=${getDefaultNoticeForZone("OPEN_APPROVAL")} мин`;
+        ? `N=${getDefaultNoticeForZone("OPEN_NOTICE")} РјРёРЅ`
+        : `N=${getDefaultNoticeForZone("OPEN_APPROVAL")} РјРёРЅ`;
       list.push({
         start,
         end,
         durationMin,
         title: zoneLabel,
-        subtitle: `${formatDuration(durationMin)} • ${notice}`,
-        statusLabel: segment.zone === "OPEN_NOTICE" ? "Авто" : "Согласование",
+        subtitle: `${formatDuration(durationMin)} вЂў ${notice}`,
+        statusLabel: segment.zone === "OPEN_NOTICE" ? "РђРІС‚Рѕ" : "РЎРѕРіР»Р°СЃРѕРІР°РЅРёРµ",
         statusTone: segment.zone === "OPEN_NOTICE" ? "ok" : "warn",
       });
     });
@@ -2439,11 +2468,15 @@
     return `${LOCAL_STORAGE_PREFIX}:${suffix}`;
   }
 
+  function calendarBackendCacheLocalKey() {
+    return `${LOCAL_STORAGE_PREFIX}:calendar_backend_14`;
+  }
+
   function saveLocal(key, payload) {
     try {
       localStorage.setItem(key, JSON.stringify(payload));
     } catch (err) {
-      logEvent("Ошибка localStorage save: " + safeErr(err));
+      logEvent("РћС€РёР±РєР° localStorage save: " + safeErr(err));
     }
   }
 
@@ -2452,8 +2485,36 @@
       const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
     } catch (err) {
-      logEvent("Ошибка localStorage read: " + safeErr(err));
+      logEvent("РћС€РёР±РєР° localStorage read: " + safeErr(err));
       return null;
+    }
+  }
+
+  function saveCalendarBackendCacheLocal() {
+    try {
+      localStorage.setItem(calendarBackendCacheLocalKey(), JSON.stringify({
+        saved_at: Date.now(),
+        rows: state.calendarBackendCache || {},
+      }));
+    } catch (err) {
+      logEvent("РћС€РёР±РєР° localStorage save (calendar backend cache): " + safeErr(err));
+    }
+  }
+
+  function loadCalendarBackendCacheLocal() {
+    try {
+      const raw = localStorage.getItem(calendarBackendCacheLocalKey());
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || !parsed.rows || typeof parsed.rows !== "object") {
+        return false;
+      }
+      state.calendarBackendCache = parsed.rows;
+      state.calendarBackendLoadedAt = Number(parsed.saved_at) || 0;
+      return true;
+    } catch (err) {
+      logEvent("РћС€РёР±РєР° localStorage read (calendar backend cache): " + safeErr(err));
+      return false;
     }
   }
 
@@ -2474,7 +2535,7 @@
       }
       toDelete.forEach((key) => localStorage.removeItem(key));
     } catch (err) {
-      logEvent("Ошибка очистки localStorage: " + safeErr(err));
+      logEvent("РћС€РёР±РєР° РѕС‡РёСЃС‚РєРё localStorage: " + safeErr(err));
     }
   }
 
@@ -2633,9 +2694,9 @@
   function formatDuration(minutes) {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
-    if (h && m) return `${h}ч ${m}м`;
-    if (h) return `${h}ч`;
-    return `${m}м`;
+    if (h && m) return `${h}С‡ ${m}Рј`;
+    if (h) return `${h}С‡`;
+    return `${m}Рј`;
   }
 
   function todayISO() {
