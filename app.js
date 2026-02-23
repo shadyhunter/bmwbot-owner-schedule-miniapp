@@ -803,6 +803,14 @@
   }
 
   async function openSpecificDateFromCalendar(isoDate) {
+    if (
+      state.tuneScope === "specific"
+      && state.mode === "override"
+      && state.date !== isoDate
+      && !state.scheduleLoading
+    ) {
+      await autoSaveCurrentSpecificDateIfDirty("calendar-switch");
+    }
     state.date = isoDate;
     state.mode = "override";
     state.tuneAdvancedOpen = false;
@@ -926,6 +934,69 @@
   function payloadSource(payload) {
     const data = payloadData(payload);
     return data && typeof data.source === "string" ? String(data.source) : "";
+  }
+
+  function extractComparableScheduleState(payload) {
+    const data = payloadData(payload);
+    if (!data || typeof data !== "object") return null;
+
+    const zoneNoticeDefaults = (data.zone_notice_defaults && typeof data.zone_notice_defaults === "object")
+      ? data.zone_notice_defaults
+      : null;
+    const greenDefault = clampInt(
+      Number(
+        data.default_notice_minutes_green
+        ?? data.default_notice_minutes
+        ?? (zoneNoticeDefaults ? zoneNoticeDefaults.OPEN_NOTICE : 0)
+        ?? 0
+      ),
+      0,
+      24 * 60,
+      0
+    );
+
+    const incoming = Array.isArray(data.segments) ? data.segments : [];
+    const parsed = incoming.map(toSlotSegment).filter(Boolean);
+    const canonical = canonicalizeSegments(parsed, { OPEN_NOTICE: greenDefault, OPEN_APPROVAL: 0 });
+
+    return {
+      timezone: String(data.timezone || DEFAULT_TIMEZONE),
+      day_off: readDayOffFromPayload(payload),
+      green_notice: greenDefault,
+      segments: canonical.map((seg) => ({
+        zone: seg.zone,
+        start_min: seg.startSlot * SLOT_MINUTES,
+        end_min: seg.endSlot * SLOT_MINUTES,
+        notice_minutes: (seg.zone === "OPEN_NOTICE" || seg.zone === "OPEN_APPROVAL")
+          ? clampInt(Number(seg.noticeMinutes ?? 0), 0, 24 * 60, 0)
+          : 0,
+      })),
+    };
+  }
+
+  function isCurrentSpecificDateDirty() {
+    if (!(state.tuneScope === "specific" && state.mode === "override")) return false;
+    const currentPayload = buildPayload();
+    const baselinePayload = loadLocal(scheduleKey()) || state.lastSchedulePayload;
+    if (!baselinePayload) return true;
+    const currentComparable = extractComparableScheduleState(currentPayload);
+    const baselineComparable = extractComparableScheduleState(baselinePayload);
+    if (!currentComparable || !baselineComparable) return true;
+    return JSON.stringify(currentComparable) !== JSON.stringify(baselineComparable);
+  }
+
+  async function autoSaveCurrentSpecificDateIfDirty(reason) {
+    if (!(state.tuneScope === "specific" && state.mode === "override")) return false;
+    if (state.scheduleLoading) return false;
+    if (!isCurrentSpecificDateDirty()) return false;
+    logEvent(`Автосохранение даты перед переходом (${reason || "switch"}).`);
+    try {
+      await saveSchedule();
+      return true;
+    } catch (err) {
+      logEvent(`Ошибка автосохранения даты: ${safeErr(err)}`);
+      return false;
+    }
   }
 
   function shouldPreferLocalSpecificOverride(localPayload, remotePayload) {
