@@ -53,6 +53,7 @@
     calendarBackendCache: Object.create(null),
     calendarBackendLoading: false,
     calendarBackendLoadedAt: 0,
+    calendarPendingRows: Object.create(null),
   };
 
   const els = {
@@ -883,12 +884,17 @@
       mini.className = "tune-calendar-mini";
       const miniTrack = document.createElement("div");
       miniTrack.className = "tune-calendar-mini-track";
-      miniTrack.style.background = row.gradient;
+      if (row.isLoading) {
+        miniTrack.classList.add("is-loading");
+      } else {
+        miniTrack.style.background = row.gradient;
+      }
       if (row.isDayOff) miniTrack.classList.add("is-day-off");
       mini.appendChild(miniTrack);
 
       const tag = document.createElement("div");
       tag.className = "tune-calendar-tag";
+      if (row.isLoading) tag.classList.add("is-loading");
       if (row.sourceKind === "override") tag.classList.add("is-override");
       if (row.isActive) tag.classList.add("is-active");
       if (row.isDayOff) tag.classList.add("is-day-off");
@@ -929,6 +935,7 @@
 
   function buildTuneCalendarRowData(isoDate) {
     const isActive = state.tuneScope === "specific" && state.date === isoDate;
+    const isLoading = isCalendarRowPending(isoDate);
     const source = resolveTuneCalendarRowSource(isoDate);
     const gradient = buildMiniTimelineGradient(source.segments);
     const d = new Date(`${isoDate}T12:00:00`);
@@ -939,12 +946,15 @@
     let tag = source.sourceKind === "override"
       ? "custom"
       : (isWeekend ? "выходные" : "будни");
+    if (isLoading) tag = "загрузка";
     if (source.isDayOff) tag = "выходной";
     if (isActive && !source.isDayOff) tag = "открыта";
     if (isRecentlySavedMarkerForDate(isoDate)) tag = "сохранено";
+    if (isLoading) tag = "загрузка";
     return {
       isoDate,
       isActive,
+      isLoading,
       sourceKind: source.sourceKind,
       isDayOff: !!source.isDayOff,
       gradient,
@@ -1152,6 +1162,27 @@
     return row && typeof row === "object" ? row : null;
   }
 
+  function isCalendarRowPending(isoDate) {
+    return !!(state.calendarPendingRows && state.calendarPendingRows[String(isoDate)]);
+  }
+
+  function setCalendarRowsPending(isoDates, pending = true) {
+    if (!Array.isArray(isoDates) || !isoDates.length) return;
+    if (!state.calendarPendingRows || typeof state.calendarPendingRows !== "object") {
+      state.calendarPendingRows = Object.create(null);
+    }
+    for (const isoDate of isoDates) {
+      const key = String(isoDate || "");
+      if (!key) continue;
+      if (pending) {
+        state.calendarPendingRows[key] = true;
+      } else {
+        delete state.calendarPendingRows[key];
+      }
+    }
+    renderTuneCalendarPanel();
+  }
+
   function toCalendarBackendRow(isoDate, payload) {
     const data = payloadData(payload);
     if (!data || !Array.isArray(data.segments)) return null;
@@ -1212,6 +1243,13 @@
       }
       state.calendarBackendCache = next;
       state.calendarBackendLoadedAt = Date.now();
+      if (state.calendarPendingRows && typeof state.calendarPendingRows === "object") {
+        for (const isoDate of Object.keys(next)) {
+          if (state.calendarPendingRows[isoDate]) {
+            delete state.calendarPendingRows[isoDate];
+          }
+        }
+      }
       renderTuneCalendarPanel();
     } catch (err) {
       logEvent(`Calendar backend refresh failed: ${safeErr(err)}`);
@@ -1780,6 +1818,7 @@
       const weekend = isWeekendIsoDate(isoDate);
       return scope === "weekends" ? weekend : !weekend;
     });
+    setCalendarRowsPending(dates, true);
     let ok = 0;
     let failed = 0;
     for (const isoDate of dates) {
@@ -1792,7 +1831,7 @@
         logEvent(`Template propagation failed for ${isoDate}: ${safeErr(err)}`);
       }
     }
-    return { total: dates.length, ok, failed };
+    return { total: dates.length, ok, failed, dates };
   }
 
   function buildPayload() {

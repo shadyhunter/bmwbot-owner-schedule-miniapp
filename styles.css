@@ -692,6 +692,21 @@ button.danger {
   border-radius: 999px;
 }
 
+.tune-calendar-mini-track.is-loading {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.16) 18%,
+      rgba(255, 255, 255, 0.42) 34%,
+      rgba(255, 255, 255, 0.16) 50%,
+      rgba(255, 255, 255, 0.08) 100%
+    ),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.05));
+  background-size: 180% 100%, 100% 100%;
+  animation: timeline-loading-shimmer 1.15s linear infinite;
+}
+
 .tune-calendar-mini-track.is-day-off {
   filter: saturate(0.25) brightness(0.85);
   opacity: 0.95;
@@ -727,6 +742,22 @@ button.danger {
   color: var(--text);
   border-color: color-mix(in srgb, var(--zone-closed) 35%, var(--line));
   background: color-mix(in srgb, var(--line) 45%, transparent);
+}
+
+.tune-calendar-tag.is-loading {
+  color: rgba(255, 255, 255, 0.86);
+  border-color: color-mix(in srgb, var(--line) 70%, white);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.12) 20%,
+      rgba(255, 255, 255, 0.22) 38%,
+      rgba(255, 255, 255, 0.12) 56%,
+      rgba(255, 255, 255, 0.06) 100%
+    );
+  background-size: 180% 100%;
+  animation: timeline-loading-shimmer 1.15s linear infinite;
 }
 
 .tune-advanced-panel {
