@@ -1819,18 +1819,26 @@
       return scope === "weekends" ? weekend : !weekend;
     });
     setCalendarRowsPending(dates, true);
+    const results = await Promise.allSettled(
+      dates.map(async (isoDate) => {
+        const overridePayload = buildOverridePayloadFromTemplatePayload(templatePayload, isoDate, scope);
+        await persistOverridePayloadForDate(overridePayload);
+        return { isoDate };
+      })
+    );
+
     let ok = 0;
     let failed = 0;
-    for (const isoDate of dates) {
-      const overridePayload = buildOverridePayloadFromTemplatePayload(templatePayload, isoDate, scope);
-      try {
-        await persistOverridePayloadForDate(overridePayload);
+    results.forEach((res, idx) => {
+      if (res.status === "fulfilled") {
         ok += 1;
-      } catch (err) {
-        failed += 1;
-        logEvent(`Template propagation failed for ${isoDate}: ${safeErr(err)}`);
+        return;
       }
-    }
+      failed += 1;
+      const isoDate = dates[idx];
+      logEvent(`Template propagation failed for ${isoDate}: ${safeErr(res.reason)}`);
+    });
+
     return { total: dates.length, ok, failed, dates };
   }
 
