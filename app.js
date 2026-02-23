@@ -40,6 +40,7 @@
     segments: demoSegments({ green: 90, blue: 0 }),
     tuneBoundaries: [minsToSlot(9 * 60), minsToSlot(10 * 60), minsToSlot(18 * 60), minsToSlot(19 * 60)],
     dayOff: false,
+    scheduleLoading: false,
     owner: null,
     lastLoadedFrom: "local",
     lastSchedulePayload: null,
@@ -1099,12 +1100,21 @@
   async function loadSchedule() {
     const requestId = ++scheduleLoadRequestSeq;
     const requestCtx = captureScheduleLoadContext();
+    const showTimelineLoading = state.tuneScope === "specific" && state.mode === "override";
+
+    if (showTimelineLoading) {
+      state.scheduleLoading = true;
+      renderTimeline();
+    } else {
+      state.scheduleLoading = false;
+    }
 
     if (isGroupTuneScope()) {
       const loadedGroup = loadLocal(tuneScopeLocalKey());
       state.source = "local";
       state.lastLoadedFrom = "local";
       if (!loadedGroup) {
+        state.scheduleLoading = false;
         state.version = null;
         state.dayOff = false;
         state.segments = demoSegments({
@@ -1116,6 +1126,7 @@
         renderAll();
         return;
       }
+      state.scheduleLoading = false;
       applyLoadedSchedule(loadedGroup);
       logEvent(`Загружено локально (${state.tuneScope}): ${state.segments.length} сегм.`);
       syncTuneBoundariesFromSegments();
@@ -1170,6 +1181,7 @@
     }
 
     if (!loaded) {
+      state.scheduleLoading = false;
       state.version = null;
       state.dayOff = false;
       state.segments = demoSegments({
@@ -1182,6 +1194,7 @@
       return;
     }
 
+    state.scheduleLoading = false;
     applyLoadedSchedule(loaded);
     logEvent(`Загружено (${state.lastLoadedFrom}): ${state.segments.length} сегм.`);
     renderAll();
@@ -1374,10 +1387,22 @@
     }
     const slotMap = expandToSlots(state.segments, getZoneNoticeDefaults());
     const visualDayOff = state.tuneScope === "specific" && !!state.dayOff;
+    const visualLoading = state.tuneScope === "specific" && state.mode === "override" && !!state.scheduleLoading;
     if (els.timelineGridWrap) els.timelineGridWrap.classList.toggle("is-day-off", visualDayOff);
+    if (els.timelineGridWrap) els.timelineGridWrap.classList.toggle("is-loading", visualLoading);
     els.timelineGrid.classList.toggle("is-day-off", visualDayOff);
+    els.timelineGrid.classList.toggle("is-loading", visualLoading);
     els.timelineBoundaryOverlay.classList.toggle("is-day-off", visualDayOff);
+    els.timelineBoundaryOverlay.classList.toggle("is-loading", visualLoading);
     els.timelineGrid.innerHTML = "";
+    if (visualLoading) {
+      const loading = document.createElement("div");
+      loading.className = "timeline-loading-strip";
+      loading.setAttribute("aria-hidden", "true");
+      els.timelineGrid.appendChild(loading);
+      renderTuneBoundaries();
+      return;
+    }
     for (let slot = 0; slot < SLOTS_PER_DAY; slot += 1) {
       const div = document.createElement("div");
       div.className = "timeline-slot";

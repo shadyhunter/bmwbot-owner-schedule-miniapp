@@ -840,6 +840,34 @@ button.danger {
   filter: saturate(0.35) brightness(0.88);
 }
 
+.timeline-grid.is-loading {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--line) 85%, white);
+}
+
+.timeline-loading-strip {
+  grid-column: 1 / -1;
+  min-height: 36px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, white);
+  background:
+    linear-gradient(
+      110deg,
+      rgba(255, 255, 255, 0.12) 8%,
+      rgba(255, 255, 255, 0.22) 18%,
+      rgba(255, 255, 255, 0.10) 30%
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--zone-open-approval) 38%, #12161a) 0%,
+      color-mix(in srgb, var(--zone-open-notice) 34%, #12161a) 46%,
+      color-mix(in srgb, var(--zone-open-approval) 34%, #12161a) 76%,
+      color-mix(in srgb, var(--zone-closed) 30%, #12161a) 100%
+    );
+  background-size: 220% 100%, 100% 100%;
+  animation: timeline-loading-shimmer 1.15s linear infinite;
+}
+
 .timeline-boundary-overlay {
   position: absolute;
   left: 0;
@@ -854,6 +882,11 @@ button.danger {
 
 .timeline-boundary-overlay.is-day-off {
   opacity: 0.82;
+}
+
+.timeline-boundary-overlay.is-loading {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .timeline-boundary-overlay input[type="range"] {
@@ -959,6 +992,15 @@ button.danger {
   left: 0;
   width: 1px;
   background: rgba(0, 0, 0, 0.18);
+}
+
+@keyframes timeline-loading-shimmer {
+  0% {
+    background-position: 180% 0, 0 0;
+  }
+  100% {
+    background-position: -40% 0, 0 0;
+  }
 }
 
 .timeline-help {
@@ -1522,6 +1564,10 @@ input[type="range"] {
   }
 
   .timeline-slot {
+    min-height: 34px;
+  }
+
+  .timeline-loading-strip {
     min-height: 34px;
   }
 
