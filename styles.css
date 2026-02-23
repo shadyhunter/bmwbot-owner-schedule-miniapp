@@ -463,6 +463,11 @@ button.danger {
   gap: 8px;
 }
 
+/* Legacy top scope buttons are hidden in the new UX (replaced by "Шаблоны" dropdown). */
+.tune-scope-switch {
+  display: none !important;
+}
+
 .scope-btn {
   min-height: 42px;
   font-weight: 700;

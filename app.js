@@ -30,6 +30,7 @@
   const state = {
     activeTab: "tune",
     tuneScope: "weekdays",
+    templateScopeSelected: "weekdays",
     tuneAdvancedOpen: false,
     calendarOpen: true,
     templatesMenuOpen: false,
@@ -369,6 +370,9 @@
     const changed = state.tuneScope !== next;
     state.tuneScope = next;
     state.templatesMenuOpen = false;
+    if (next === "weekdays" || next === "weekends") {
+      state.templateScopeSelected = next;
+    }
 
     if (next === "specific") {
       state.mode = "override";
@@ -423,6 +427,8 @@
     els.btnOpenAdvancedMini.hidden = state.tuneScope !== "specific";
     els.btnOpenAdvancedMini.classList.toggle("is-active", state.tuneAdvancedOpen && state.tuneScope === "specific");
     if (els.btnTemplatesMenuToggle) {
+      const templateLabel = state.templateScopeSelected === "weekends" ? "Выходные" : "Будни";
+      els.btnTemplatesMenuToggle.textContent = `Шаблоны: ${templateLabel}`;
       els.btnTemplatesMenuToggle.setAttribute("aria-expanded", state.templatesMenuOpen ? "true" : "false");
       els.btnTemplatesMenuToggle.classList.toggle("is-active", state.templatesMenuOpen);
     }
@@ -430,12 +436,12 @@
       els.tuneTemplatesMenu.hidden = !state.templatesMenuOpen;
     }
     if (els.btnTemplatesWeekdays) {
-      const activeWeekdays = state.tuneScope === "weekdays";
+      const activeWeekdays = state.templateScopeSelected === "weekdays";
       els.btnTemplatesWeekdays.classList.toggle("is-active", activeWeekdays);
       els.btnTemplatesWeekdays.setAttribute("aria-pressed", activeWeekdays ? "true" : "false");
     }
     if (els.btnTemplatesWeekends) {
-      const activeWeekends = state.tuneScope === "weekends";
+      const activeWeekends = state.templateScopeSelected === "weekends";
       els.btnTemplatesWeekends.classList.toggle("is-active", activeWeekends);
       els.btnTemplatesWeekends.setAttribute("aria-pressed", activeWeekends ? "true" : "false");
     }
