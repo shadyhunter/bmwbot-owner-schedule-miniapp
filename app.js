@@ -383,6 +383,27 @@
       els.btnDayModeOff.setAttribute("aria-pressed", showDayMode && !!state.dayOff ? "true" : "false");
     }
 
+    const lockDuringDateLoad = state.tuneScope === "specific" && state.mode === "override" && !!state.scheduleLoading;
+    const guardedButtons = [
+      els.btnSaveSimple,
+      els.btnSave,
+      els.btnRevertUnsaved,
+      els.btnResetPreviewDefault,
+      els.btnDayModeWork,
+      els.btnDayModeOff,
+    ].filter(Boolean);
+    guardedButtons.forEach((btn) => {
+      if (!btn) return;
+      btn.classList.toggle("is-loading-locked", lockDuringDateLoad);
+      if (lockDuringDateLoad) {
+        btn.disabled = true;
+        return;
+      }
+      if (!btn.classList.contains("is-saving") && !btn.classList.contains("is-reverting")) {
+        btn.disabled = false;
+      }
+    });
+
     toggleModeFields();
   }
 
@@ -504,6 +525,10 @@
   }
 
   async function revertUnsavedTuneChanges() {
+    if (state.tuneScope === "specific" && state.mode === "override" && state.scheduleLoading) {
+      logEvent("Подожди: дата ещё загружается, откат временно недоступен.");
+      return;
+    }
     startRevertButtonFx();
     logEvent("Возврат к последней сохранённой версии (без сохранения текущих правок).");
     try {
@@ -516,6 +541,10 @@
   }
 
   function resetTunePreviewToDefault() {
+    if (state.tuneScope === "specific" && state.mode === "override" && state.scheduleLoading) {
+      logEvent("Подожди: дата ещё загружается, сброс временно недоступен.");
+      return;
+    }
     // Invalidate any in-flight load so a late response cannot repaint old data after reset.
     scheduleLoadRequestSeq += 1;
     clearAllScheduleLocalCaches();
@@ -1255,6 +1284,10 @@
   }
 
   async function saveSchedule() {
+    if (state.tuneScope === "specific" && state.mode === "override" && state.scheduleLoading) {
+      logEvent("Подожди: дата ещё загружается. Сохранение заблокировано до завершения загрузки.");
+      return;
+    }
     startSaveButtonFx();
     state.segments = canonicalizeSegments(state.segments, getZoneNoticeDefaults());
     syncTuneBoundariesFromSegments();
