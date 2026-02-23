@@ -41,14 +41,21 @@
     <main class="tab-panels">
     <section class="panel controls" data-tab-panel="tune">
       <div class="tune-simple-top">
-        <div class="tune-scope-switch" role="tablist" aria-label="Тип расписания">
+        <div class="tune-scope-switch" role="tablist" aria-label="Тип расписания" hidden>
           <button type="button" id="btnTuneWeekdays" class="scope-btn is-active" role="tab" aria-selected="true">Будни</button>
           <button type="button" id="btnTuneWeekends" class="scope-btn" role="tab" aria-selected="false">Выходные</button>
           <button type="button" id="btnTuneSpecific" class="scope-btn ghost" role="tab" aria-selected="false" hidden>Специфика</button>
         </div>
         <div class="tune-top-actions">
           <button type="button" class="ghost" id="btnOpenSettings">Настройки</button>
-          <button type="button" class="ghost" id="btnToggleTuneAdvanced">Календарь</button>
+          <div class="tune-templates-wrap" id="tuneTemplatesWrap">
+            <button type="button" class="ghost" id="btnTemplatesMenuToggle" aria-haspopup="menu" aria-expanded="false">Шаблоны</button>
+            <div class="tune-templates-menu" id="tuneTemplatesMenu" role="menu" hidden>
+              <button type="button" id="btnTemplatesWeekdays" role="menuitem">Будни</button>
+              <button type="button" id="btnTemplatesWeekends" role="menuitem">Выходные</button>
+            </div>
+          </div>
+          <button type="button" class="ghost" id="btnToggleTuneAdvanced" hidden>Календарь</button>
           <button type="button" class="accent" id="btnSaveSimple">Сохранить</button>
           <button type="button" class="danger-solid" id="btnRevertUnsaved">Вернуть</button>
           <button type="button" class="ghost tune-mini-icon tune-reset-mini" id="btnResetPreviewDefault" title="К дефолту (без сохранения)" aria-label="К дефолту (без сохранения)">☒</button>

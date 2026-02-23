@@ -31,7 +31,8 @@
     activeTab: "tune",
     tuneScope: "weekdays",
     tuneAdvancedOpen: false,
-    calendarOpen: false,
+    calendarOpen: true,
+    templatesMenuOpen: false,
     mode: "override",
     date: todayISO(),
     weekday: String(new Date().getDay()),
@@ -61,6 +62,11 @@
     btnTuneWeekends: byId("btnTuneWeekends"),
     btnTuneSpecific: byId("btnTuneSpecific"),
     btnToggleTuneAdvanced: byId("btnToggleTuneAdvanced"),
+    btnTemplatesMenuToggle: byIdOptional("btnTemplatesMenuToggle"),
+    tuneTemplatesMenu: byIdOptional("tuneTemplatesMenu"),
+    tuneTemplatesWrap: byIdOptional("tuneTemplatesWrap"),
+    btnTemplatesWeekdays: byIdOptional("btnTemplatesWeekdays"),
+    btnTemplatesWeekends: byIdOptional("btnTemplatesWeekends"),
     btnTuneAdvancedClose: byId("btnTuneAdvancedClose"),
     btnSaveSimple: byId("btnSaveSimple"),
     simpleGreenNoticeInput: byIdOptional("simpleGreenNoticeInput"),
@@ -185,8 +191,44 @@
     });
 
     els.btnToggleTuneAdvanced.addEventListener("click", () => {
-      state.calendarOpen = !state.calendarOpen;
+      state.calendarOpen = true;
       renderAll();
+    });
+
+    if (els.btnTemplatesMenuToggle) {
+      els.btnTemplatesMenuToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.templatesMenuOpen = !state.templatesMenuOpen;
+        renderTuneScopeControls();
+      });
+    }
+
+    if (els.btnTemplatesWeekdays) {
+      els.btnTemplatesWeekdays.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.templatesMenuOpen = false;
+        await setTuneScope("weekdays");
+      });
+    }
+
+    if (els.btnTemplatesWeekends) {
+      els.btnTemplatesWeekends.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.templatesMenuOpen = false;
+        await setTuneScope("weekends");
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!state.templatesMenuOpen) return;
+      if (!els.tuneTemplatesWrap) return;
+      const target = event.target;
+      if (target instanceof Node && els.tuneTemplatesWrap.contains(target)) return;
+      state.templatesMenuOpen = false;
+      renderTuneScopeControls();
     });
 
     els.btnOpenAdvancedMini.addEventListener("click", () => {
@@ -326,6 +368,7 @@
     const next = ["weekdays", "weekends", "specific"].includes(scope) ? scope : "weekdays";
     const changed = state.tuneScope !== next;
     state.tuneScope = next;
+    state.templatesMenuOpen = false;
 
     if (next === "specific") {
       state.mode = "override";
@@ -372,11 +415,30 @@
     if (els.simpleGreenNoticeInput) {
       els.simpleGreenNoticeInput.value = String(clampInt(state.defaultNoticeMinutesGreen, 0, 24 * 60, 90));
     }
-    els.tuneCalendarPanel.hidden = !state.calendarOpen;
+    state.calendarOpen = true;
+    els.tuneCalendarPanel.hidden = false;
     els.tuneAdvancedPanel.hidden = !(state.tuneAdvancedOpen && state.tuneScope === "specific");
-    els.btnToggleTuneAdvanced.textContent = state.calendarOpen ? "Скрыть календарь" : "Календарь";
+    els.btnToggleTuneAdvanced.hidden = true;
+    els.btnToggleTuneAdvanced.textContent = "Календарь";
     els.btnOpenAdvancedMini.hidden = state.tuneScope !== "specific";
     els.btnOpenAdvancedMini.classList.toggle("is-active", state.tuneAdvancedOpen && state.tuneScope === "specific");
+    if (els.btnTemplatesMenuToggle) {
+      els.btnTemplatesMenuToggle.setAttribute("aria-expanded", state.templatesMenuOpen ? "true" : "false");
+      els.btnTemplatesMenuToggle.classList.toggle("is-active", state.templatesMenuOpen);
+    }
+    if (els.tuneTemplatesMenu) {
+      els.tuneTemplatesMenu.hidden = !state.templatesMenuOpen;
+    }
+    if (els.btnTemplatesWeekdays) {
+      const activeWeekdays = state.tuneScope === "weekdays";
+      els.btnTemplatesWeekdays.classList.toggle("is-active", activeWeekdays);
+      els.btnTemplatesWeekdays.setAttribute("aria-pressed", activeWeekdays ? "true" : "false");
+    }
+    if (els.btnTemplatesWeekends) {
+      const activeWeekends = state.tuneScope === "weekends";
+      els.btnTemplatesWeekends.classList.toggle("is-active", activeWeekends);
+      els.btnTemplatesWeekends.setAttribute("aria-pressed", activeWeekends ? "true" : "false");
+    }
     if (els.btnResetPreviewDefault) {
       els.btnResetPreviewDefault.hidden = true;
       els.btnResetPreviewDefault.disabled = true;
@@ -559,7 +621,7 @@
     state.tuneScope = "weekdays";
     state.mode = "override";
     state.tuneAdvancedOpen = false;
-    state.calendarOpen = false;
+    state.calendarOpen = true;
     state.date = todayISO();
     state.weekday = String(new Date().getDay());
     state.defaultNoticeMinutesGreen = 90;

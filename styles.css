@@ -492,6 +492,40 @@ button.danger {
   gap: 8px;
 }
 
+.tune-templates-wrap {
+  position: relative;
+}
+
+.tune-templates-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  min-width: 160px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 96%, black);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+  display: grid;
+  gap: 4px;
+}
+
+.tune-templates-menu[hidden] {
+  display: none !important;
+}
+
+.tune-templates-menu button {
+  width: 100%;
+  text-align: left;
+  min-height: 36px;
+}
+
+.tune-templates-menu button.is-active {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: color-mix(in srgb, var(--accent-2) 28%, var(--line));
+}
+
 .tune-advanced-mini {
   margin-left: 0;
   min-width: 30px;
@@ -1471,6 +1505,20 @@ input[type="range"] {
 
   .tune-top-actions button {
     flex: 1 1 100%;
+  }
+
+  .tune-templates-wrap {
+    flex: 1 1 100%;
+  }
+
+  .tune-templates-wrap > button {
+    width: 100%;
+  }
+
+  .tune-templates-menu {
+    left: 0;
+    right: 0;
+    min-width: 0;
   }
 
   .tune-top-actions button.tune-mini-icon {
