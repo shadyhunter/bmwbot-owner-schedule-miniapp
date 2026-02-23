@@ -1514,6 +1514,7 @@
     els.hourAxis.innerHTML = "";
     if (els.hourAxis && els.hourAxis.style) {
       els.hourAxis.style.setProperty("--hour-axis-cols", String(24 - TIMELINE_VISIBLE_START_HOUR));
+      els.hourAxis.style.gridTemplateColumns = `repeat(${24 - TIMELINE_VISIBLE_START_HOUR}, 1fr)`;
     }
     for (let h = TIMELINE_VISIBLE_START_HOUR; h < 24; h += 1) {
       const span = document.createElement("span");
@@ -1543,6 +1544,12 @@
     els.timelineBoundaryOverlay.classList.toggle("is-loading", visualLoading);
     if (els.timelineGrid && els.timelineGrid.style) {
       els.timelineGrid.style.setProperty("--timeline-visible-slots", String(TIMELINE_VISIBLE_SLOT_COUNT));
+      const isMobile = typeof window !== "undefined"
+        && !!window.matchMedia
+        && window.matchMedia("(max-width: 768px)").matches;
+      els.timelineGrid.style.gridTemplateColumns = isMobile
+        ? `repeat(${TIMELINE_VISIBLE_SLOT_COUNT}, minmax(0, 1fr))`
+        : "";
     }
     els.timelineGrid.innerHTML = "";
     if (visualLoading) {

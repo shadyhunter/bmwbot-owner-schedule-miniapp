@@ -1564,6 +1564,11 @@ input[type="range"] {
     grid-column: span 4;
   }
 
+  /* With visible window 06:00-24:00 (18 hours), the last 4-hour label (22:00) would wrap. */
+  .hour-axis span:nth-child(4n + 1):nth-last-child(-n + 3) {
+    display: none;
+  }
+
   .timeline-grid {
     min-width: 0;
     grid-template-columns: repeat(var(--timeline-visible-slots, 96), minmax(0, 1fr));
