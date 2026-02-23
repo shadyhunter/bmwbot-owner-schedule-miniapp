@@ -794,7 +794,7 @@ button.danger {
 
 .hour-axis {
   display: grid;
-  grid-template-columns: repeat(24, 1fr);
+  grid-template-columns: repeat(var(--hour-axis-cols, 24), 1fr);
   gap: 0;
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
@@ -831,7 +831,7 @@ button.danger {
 
 .timeline-grid {
   display: grid;
-  grid-template-columns: repeat(96, minmax(8px, 1fr));
+  grid-template-columns: repeat(var(--timeline-visible-slots, 96), minmax(8px, 1fr));
   gap: var(--slot-gap);
   min-width: 960px;
   background: var(--line);

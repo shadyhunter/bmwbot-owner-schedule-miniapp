@@ -3,6 +3,9 @@
 
   const SLOT_MINUTES = 15;
   const SLOTS_PER_DAY = 24 * 60 / SLOT_MINUTES;
+  const TIMELINE_VISIBLE_START_HOUR = 6;
+  const TIMELINE_VISIBLE_START_SLOT = (TIMELINE_VISIBLE_START_HOUR * 60) / SLOT_MINUTES;
+  const TIMELINE_VISIBLE_SLOT_COUNT = SLOTS_PER_DAY - TIMELINE_VISIBLE_START_SLOT;
   const LOCAL_STORAGE_PREFIX = "bmwbot_kolyan_schedule_v1";
   const DEFAULT_TIMEZONE = "Europe/Moscow";
 
@@ -700,11 +703,20 @@
   function renderTuneBoundaries() {
     const [b1, b2, b3, b4] = normalizeTuneBoundaries(state.tuneBoundaries);
     state.tuneBoundaries = [b1, b2, b3, b4];
+    const vb1 = Math.max(TIMELINE_VISIBLE_START_SLOT, b1);
+    const vb2 = Math.max(TIMELINE_VISIBLE_START_SLOT, b2);
+    const vb3 = Math.max(TIMELINE_VISIBLE_START_SLOT, b3);
+    const vb4 = Math.max(TIMELINE_VISIBLE_START_SLOT, b4);
 
-    els.boundary1Range.value = String(b1);
-    els.boundary2Range.value = String(b2);
-    els.boundary3Range.value = String(b3);
-    els.boundary4Range.value = String(b4);
+    [els.boundary1Range, els.boundary2Range, els.boundary3Range, els.boundary4Range].forEach((input) => {
+      if (!input) return;
+      input.min = String(TIMELINE_VISIBLE_START_SLOT);
+      input.max = String(SLOTS_PER_DAY);
+    });
+    els.boundary1Range.value = String(vb1);
+    els.boundary2Range.value = String(vb2);
+    els.boundary3Range.value = String(vb3);
+    els.boundary4Range.value = String(vb4);
     if (els.boundarySummary) {
       els.boundarySummary.innerHTML = "";
     }
@@ -1001,7 +1013,12 @@
     if (!rect || rect.width <= 0) return null;
     const ratio = (Number(clientX) - rect.left) / rect.width;
     const clamped = Math.min(1, Math.max(0, ratio));
-    return clampInt(clamped * SLOTS_PER_DAY, 0, SLOTS_PER_DAY, 0);
+    return clampInt(
+      TIMELINE_VISIBLE_START_SLOT + (clamped * TIMELINE_VISIBLE_SLOT_COUNT),
+      TIMELINE_VISIBLE_START_SLOT,
+      SLOTS_PER_DAY,
+      TIMELINE_VISIBLE_START_SLOT
+    );
   }
 
   function findNearestTuneBoundaryIndex(slot) {
@@ -1418,7 +1435,10 @@
 
   function renderHourAxis() {
     els.hourAxis.innerHTML = "";
-    for (let h = 0; h < 24; h += 1) {
+    if (els.hourAxis && els.hourAxis.style) {
+      els.hourAxis.style.setProperty("--hour-axis-cols", String(24 - TIMELINE_VISIBLE_START_HOUR));
+    }
+    for (let h = TIMELINE_VISIBLE_START_HOUR; h < 24; h += 1) {
       const span = document.createElement("span");
       span.textContent = `${String(h).padStart(2, "0")}:00`;
       els.hourAxis.appendChild(span);
@@ -1444,6 +1464,9 @@
     els.timelineGrid.classList.toggle("is-loading", visualLoading);
     els.timelineBoundaryOverlay.classList.toggle("is-day-off", visualDayOff);
     els.timelineBoundaryOverlay.classList.toggle("is-loading", visualLoading);
+    if (els.timelineGrid && els.timelineGrid.style) {
+      els.timelineGrid.style.setProperty("--timeline-visible-slots", String(TIMELINE_VISIBLE_SLOT_COUNT));
+    }
     els.timelineGrid.innerHTML = "";
     if (visualLoading) {
       const loading = document.createElement("div");
@@ -1453,7 +1476,7 @@
       renderTuneBoundaries();
       return;
     }
-    for (let slot = 0; slot < SLOTS_PER_DAY; slot += 1) {
+    for (let slot = TIMELINE_VISIBLE_START_SLOT; slot < SLOTS_PER_DAY; slot += 1) {
       const div = document.createElement("div");
       div.className = "timeline-slot";
       div.dataset.zone = slotMap[slot].zone;
