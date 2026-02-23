@@ -116,6 +116,7 @@
   const telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   let tuneDrag = null;
   let saveFxTimer = null;
+  let revertFxTimer = null;
   let scheduleLoadRequestSeq = 0;
 
   init();
@@ -391,6 +392,10 @@
     return list;
   }
 
+  function getRevertButtonsForFx() {
+    return els.btnRevertUnsaved ? [els.btnRevertUnsaved] : [];
+  }
+
   function startSaveButtonFx() {
     if (saveFxTimer) {
       clearTimeout(saveFxTimer);
@@ -436,6 +441,51 @@
     }, success ? 1400 : 0);
   }
 
+  function startRevertButtonFx() {
+    if (revertFxTimer) {
+      clearTimeout(revertFxTimer);
+      revertFxTimer = null;
+    }
+    getRevertButtonsForFx().forEach((btn) => {
+      if (!btn) return;
+      if (!btn.dataset.baseLabel) {
+        btn.dataset.baseLabel = (btn.textContent || "").trim();
+      }
+      btn.classList.remove("is-reverted");
+      btn.classList.add("is-reverting");
+      if (!btn.hidden) {
+        btn.textContent = "Возвращаю...";
+      }
+      btn.disabled = true;
+    });
+  }
+
+  function finishRevertButtonFx(success) {
+    getRevertButtonsForFx().forEach((btn) => {
+      if (!btn) return;
+      btn.classList.remove("is-reverting");
+      btn.disabled = false;
+      if (success) {
+        btn.classList.add("is-reverted");
+        if (!btn.hidden) {
+          btn.textContent = "Возвращено";
+        }
+      } else if (btn.dataset.baseLabel) {
+        btn.textContent = btn.dataset.baseLabel;
+      }
+    });
+
+    if (revertFxTimer) clearTimeout(revertFxTimer);
+    revertFxTimer = setTimeout(() => {
+      getRevertButtonsForFx().forEach((btn) => {
+        if (!btn) return;
+        btn.classList.remove("is-reverted");
+        if (btn.dataset.baseLabel) btn.textContent = btn.dataset.baseLabel;
+      });
+      revertFxTimer = null;
+    }, success ? 1400 : 0);
+  }
+
   function markScheduleSaved() {
     state.lastSaveMarker = {
       at: Date.now(),
@@ -453,11 +503,14 @@
   }
 
   async function revertUnsavedTuneChanges() {
+    startRevertButtonFx();
     logEvent("Возврат к последней сохранённой версии (без сохранения текущих правок).");
     try {
       await loadSchedule();
+      finishRevertButtonFx(true);
     } catch (err) {
       logEvent(`Не удалось вернуть сохранённую версию: ${safeErr(err)}`);
+      finishRevertButtonFx(false);
     }
   }
 
