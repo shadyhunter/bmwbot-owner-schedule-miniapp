@@ -65,6 +65,7 @@
     calendarBackendLoading: false,
     calendarBackendLoadedAt: 0,
     calendarPendingRows: Object.create(null),
+    startupHydrating: false,
   };
 
   const els = {
@@ -146,7 +147,7 @@
   let scheduleLoadRequestSeq = 0;
   let calendarBackendRequestSeq = 0;
 
-  init();
+  void init();
 
   function init() {
     initTelegram();
@@ -154,10 +155,18 @@
     bindControls();
     renderHourAxis();
     hydrateControlsFromState();
+    if (getApiBase()) {
+      state.startupHydrating = true;
+      state.scheduleLoading = true;
+      const initialDates = upcomingCalendarDates(14);
+      state.calendarPendingRows = Object.create(null);
+      initialDates.forEach((isoDate) => {
+        state.calendarPendingRows[String(isoDate)] = true;
+      });
+    }
     setTuneScope("weekdays", { skipLoad: true, keepAdvancedState: true });
-    renderAll();
     void loadSchedule();
-    void refreshCalendarBackendWindow({ force: false });
+    void refreshCalendarBackendWindow({ force: true });
   }
 
   function initTelegram() {
@@ -1201,6 +1210,21 @@
     renderTuneCalendarPanel();
   }
 
+  function setCalendarRowsPendingExpected(entries) {
+    if (!Array.isArray(entries) || !entries.length) return;
+    if (!state.calendarPendingRows || typeof state.calendarPendingRows !== "object") {
+      state.calendarPendingRows = Object.create(null);
+    }
+    for (const entry of entries) {
+      if (!entry || typeof entry !== "object") continue;
+      const key = String(entry.isoDate || "");
+      if (!key) continue;
+      const expectedVersion = typeof entry.expectedVersion === "string" ? entry.expectedVersion : "";
+      state.calendarPendingRows[key] = expectedVersion ? { expectedVersion } : true;
+    }
+    renderTuneCalendarPanel();
+  }
+
   function toCalendarBackendRow(isoDate, payload) {
     const data = payloadData(payload);
     if (!data || !Array.isArray(data.segments)) return null;
@@ -1263,7 +1287,20 @@
       state.calendarBackendLoadedAt = Date.now();
       if (state.calendarPendingRows && typeof state.calendarPendingRows === "object") {
         for (const isoDate of Object.keys(next)) {
-          if (state.calendarPendingRows[isoDate]) {
+          const pendingState = state.calendarPendingRows[isoDate];
+          if (!pendingState) continue;
+          if (pendingState === true) {
+            delete state.calendarPendingRows[isoDate];
+            continue;
+          }
+          if (typeof pendingState === "object") {
+            const expectedVersion = typeof pendingState.expectedVersion === "string"
+              ? pendingState.expectedVersion
+              : "";
+            const row = next[isoDate];
+            if (expectedVersion && row && row.version !== expectedVersion) {
+              continue;
+            }
             delete state.calendarPendingRows[isoDate];
           }
         }
@@ -1274,6 +1311,11 @@
     } finally {
       if (requestId === calendarBackendRequestSeq) {
         state.calendarBackendLoading = false;
+        if (state.startupHydrating) {
+          state.startupHydrating = false;
+          renderTuneScopeControls();
+          renderTimeline();
+        }
       }
     }
   }
@@ -1836,10 +1878,16 @@
       const weekend = isWeekendIsoDate(isoDate);
       return scope === "weekends" ? weekend : !weekend;
     });
-    setCalendarRowsPending(dates, true);
+    const jobs = dates.map((isoDate) => {
+      const overridePayload = buildOverridePayloadFromTemplatePayload(templatePayload, isoDate, scope);
+      return { isoDate, overridePayload };
+    });
+    setCalendarRowsPendingExpected(jobs.map(({ isoDate, overridePayload }) => ({
+      isoDate,
+      expectedVersion: String(overridePayload.version || ""),
+    })));
     const results = await Promise.allSettled(
-      dates.map(async (isoDate) => {
-        const overridePayload = buildOverridePayloadFromTemplatePayload(templatePayload, isoDate, scope);
+      jobs.map(async ({ isoDate, overridePayload }) => {
         await persistOverridePayloadForDate(overridePayload);
         return { isoDate };
       })
@@ -1847,6 +1895,7 @@
 
     let ok = 0;
     let failed = 0;
+    const failedDates = [];
     results.forEach((res, idx) => {
       if (res.status === "fulfilled") {
         ok += 1;
@@ -1854,8 +1903,12 @@
       }
       failed += 1;
       const isoDate = dates[idx];
+      failedDates.push(isoDate);
       logEvent(`Template propagation failed for ${isoDate}: ${safeErr(res.reason)}`);
     });
+    if (failedDates.length) {
+      setCalendarRowsPending(failedDates, false);
+    }
 
     return { total: dates.length, ok, failed, dates };
   }
@@ -1949,7 +2002,7 @@
     }
     const slotMap = expandToSlots(state.segments, getZoneNoticeDefaults());
     const visualDayOff = state.tuneScope === "specific" && !!state.dayOff;
-    const visualLoading = state.tuneScope === "specific" && state.mode === "override" && !!state.scheduleLoading;
+    const visualLoading = !!state.scheduleLoading || !!state.startupHydrating;
     if (els.timelineGridWrap) els.timelineGridWrap.classList.toggle("is-day-off", visualDayOff);
     if (els.timelineGridWrap) els.timelineGridWrap.classList.toggle("is-loading", visualLoading);
     els.timelineGrid.classList.toggle("is-day-off", visualDayOff);
