@@ -569,6 +569,26 @@ button.danger {
   line-height: 1;
 }
 
+.tune-refresh-mini {
+  color: color-mix(in srgb, var(--accent-2) 75%, white);
+  border-color: color-mix(in srgb, var(--accent-2) 28%, var(--line));
+  opacity: 0.92;
+}
+
+.tune-refresh-mini:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent-2) 11%, transparent);
+}
+
+.tune-refresh-mini.is-spinning {
+  animation: tune-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes tune-refresh-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .tune-reset-mini {
   margin-left: auto;
   color: color-mix(in srgb, var(--danger) 82%, white);

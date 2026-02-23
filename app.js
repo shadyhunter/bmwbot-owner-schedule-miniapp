@@ -99,6 +99,7 @@
     weekdayFieldWrap: byId("weekdayFieldWrap"),
     btnOpenSettings: byId("btnOpenSettings"),
     btnOpenAdvancedMini: byId("btnOpenAdvancedMini"),
+    btnRefreshCalendarBackend: byIdOptional("btnRefreshCalendarBackend"),
     btnRevertUnsaved: byId("btnRevertUnsaved"),
     btnResetPreviewDefault: byId("btnResetPreviewDefault"),
     defaultNoticeInput: byId("defaultNoticeInput"),
@@ -274,6 +275,12 @@
     if (els.btnResetPreviewDefault) {
       els.btnResetPreviewDefault.addEventListener("click", async () => {
         await resetTunePreviewToDefault();
+      });
+    }
+
+    if (els.btnRefreshCalendarBackend) {
+      els.btnRefreshCalendarBackend.addEventListener("click", async () => {
+        await refreshCalendarWindowFromBackendManual();
       });
     }
 
@@ -490,6 +497,7 @@
     const guardedButtons = [
       els.btnSaveSimple,
       els.btnSave,
+      els.btnRefreshCalendarBackend,
       els.btnRevertUnsaved,
       els.btnResetPreviewDefault,
       els.btnDayModeWork,
@@ -726,6 +734,33 @@
       await loadSchedule();
     } catch (err) {
       logEvent(`Reset default reload warning: ${safeErr(err)}`);
+    }
+  }
+
+  async function refreshCalendarWindowFromBackendManual() {
+    if (state.scheduleLoading) {
+      logEvent("Подожди: текущая дата ещё загружается, обновление календаря временно недоступно.");
+      return;
+    }
+    const dates = upcomingCalendarDates(14);
+    if (els.btnRefreshCalendarBackend) {
+      els.btnRefreshCalendarBackend.disabled = true;
+      els.btnRefreshCalendarBackend.classList.add("is-spinning");
+    }
+    setCalendarRowsPending(dates, true);
+    logEvent("Обновление 14 дней с сервера...");
+    try {
+      await refreshCalendarBackendWindow({ force: true });
+      logEvent("Календарь (14 дней) обновлён с сервера.");
+    } catch (err) {
+      logEvent(`Ошибка обновления календаря: ${safeErr(err)}`);
+    } finally {
+      setCalendarRowsPending(dates, false);
+      if (els.btnRefreshCalendarBackend) {
+        els.btnRefreshCalendarBackend.classList.remove("is-spinning");
+        els.btnRefreshCalendarBackend.disabled = false;
+      }
+      renderTuneScopeControls();
     }
   }
 
