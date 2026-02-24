@@ -2603,7 +2603,7 @@
         chat_id: chatId,
         resolved_by: state.owner && state.owner.username ? `@${state.owner.username}` : "miniapp_owner",
       };
-      await fetchJson(`${apiBase}/clients/chat/resolve`, {
+      await fetchJson(`${apiBase}/clients/chat/problem-resolve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
