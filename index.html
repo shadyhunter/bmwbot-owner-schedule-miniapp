@@ -214,6 +214,31 @@
         <div id="todaySummaryNotes" class="work-list compact-list"></div>
       </div>
     </section>
+
+    <section class="panel split clients-layout" data-tab-panel="clients" hidden>
+      <div class="clients-list-wrap">
+        <div class="section-head">
+          <h2>Клиенты (проблемные)</h2>
+          <span class="muted" id="clientsProblemsMeta">Активные чаты с ручным режимом</span>
+        </div>
+        <div id="clientsProblemsList" class="work-list clients-problem-list"></div>
+      </div>
+      <div class="clients-thread-wrap">
+        <div class="section-head">
+          <h2 id="clientsThreadTitle">Выберите чат</h2>
+          <span class="muted" id="clientsThreadMeta">История Avito + ручной режим</span>
+        </div>
+        <div id="clientsThreadMessages" class="clients-thread-messages"></div>
+        <div class="clients-composer">
+          <textarea id="clientsComposerText" rows="3" placeholder="Сообщение клиенту (Avito)"></textarea>
+          <div class="clients-composer-actions">
+            <button type="button" id="btnClientsRefresh" class="ghost">↻ Обновить</button>
+            <button type="button" id="btnClientsResolve" class="warn">Проблема решена</button>
+            <button type="button" id="btnClientsSend" class="primary">Отправить</button>
+          </div>
+        </div>
+      </div>
+    </section>
     </main>
 
     <nav class="bottom-nav" id="bottomNav" aria-label="Навигация по вкладкам">
@@ -228,6 +253,10 @@
       <button type="button" class="bottom-nav-btn" data-tab-btn="parts" aria-pressed="false">
         <span class="tab-icon" aria-hidden="true">##</span>
         <span class="tab-label">Детали</span>
+      </button>
+      <button type="button" class="bottom-nav-btn" data-tab-btn="clients" aria-pressed="false">
+        <span class="tab-icon" aria-hidden="true">@</span>
+        <span class="tab-label">Клиенты</span>
       </button>
       <button type="button" class="bottom-nav-btn is-default" data-tab-btn="tune" aria-pressed="true">
         <span class="tab-icon" aria-hidden="true">+</span>

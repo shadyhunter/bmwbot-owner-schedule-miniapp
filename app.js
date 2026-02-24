@@ -66,6 +66,20 @@
     calendarBackendLoadedAt: 0,
     calendarPendingRows: Object.create(null),
     startupHydrating: false,
+    clients: {
+      loadingList: false,
+      listError: "",
+      problems: [],
+      selectedChatId: "",
+      historyLoading: false,
+      historyError: "",
+      historyMessages: [],
+      selectedProblem: null,
+      composerText: "",
+      sending: false,
+      resolving: false,
+      initialHydrated: false,
+    },
   };
 
   const els = {
@@ -139,6 +153,15 @@
     todaySummaryKpis: byId("todaySummaryKpis"),
     todayOpenWindowsList: byId("todayOpenWindowsList"),
     todaySummaryNotes: byId("todaySummaryNotes"),
+    clientsProblemsMeta: byIdOptional("clientsProblemsMeta"),
+    clientsProblemsList: byIdOptional("clientsProblemsList"),
+    clientsThreadTitle: byIdOptional("clientsThreadTitle"),
+    clientsThreadMeta: byIdOptional("clientsThreadMeta"),
+    clientsThreadMessages: byIdOptional("clientsThreadMessages"),
+    clientsComposerText: byIdOptional("clientsComposerText"),
+    btnClientsRefresh: byIdOptional("btnClientsRefresh"),
+    btnClientsResolve: byIdOptional("btnClientsResolve"),
+    btnClientsSend: byIdOptional("btnClientsSend"),
   };
 
   const telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -396,6 +419,46 @@
 
     els.btnSave.addEventListener("click", saveSchedule);
     els.btnSaveSimple.addEventListener("click", saveSchedule);
+
+    if (els.clientsProblemsList) {
+      els.clientsProblemsList.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const btn = target.closest("[data-clients-chat-id]");
+        if (!btn) return;
+        const chatId = btn.getAttribute("data-clients-chat-id") || "";
+        if (!chatId) return;
+        void openClientsChat(chatId);
+      });
+    }
+
+    if (els.clientsComposerText) {
+      els.clientsComposerText.addEventListener("input", () => {
+        state.clients.composerText = els.clientsComposerText.value || "";
+        renderClientsTab();
+      });
+    }
+
+    if (els.btnClientsRefresh) {
+      els.btnClientsRefresh.addEventListener("click", async () => {
+        await refreshClientsProblems({ force: true });
+        if (state.clients.selectedChatId) {
+          await refreshClientsChatHistory(state.clients.selectedChatId, { force: true });
+        }
+      });
+    }
+
+    if (els.btnClientsSend) {
+      els.btnClientsSend.addEventListener("click", async () => {
+        await sendClientsManualMessage();
+      });
+    }
+
+    if (els.btnClientsResolve) {
+      els.btnClientsResolve.addEventListener("click", async () => {
+        await resolveClientsProblemChat();
+      });
+    }
   }
 
   async function setTuneScope(scope, options) {
@@ -1571,10 +1634,13 @@
   }
 
   function setActiveTab(tab) {
-    const allowed = new Set(["summary", "today", "parts", "tune"]);
+    const allowed = new Set(["summary", "today", "parts", "clients", "tune"]);
     const next = allowed.has(tab) ? tab : "tune";
     if (state.activeTab === next) return;
     state.activeTab = next;
+    if (next === "clients") {
+      void ensureClientsHydrated();
+    }
     renderTabPanels();
   }
 
@@ -2344,6 +2410,404 @@
     renderTodayArrivalsTab(snapshot);
     renderTodayPartsTab(snapshot);
     renderTodaySummaryTab(snapshot);
+    renderClientsTab();
+  }
+
+  async function ensureClientsHydrated() {
+    if (state.clients.initialHydrated) return;
+    await refreshClientsProblems({ force: true });
+    state.clients.initialHydrated = true;
+  }
+
+  function getClientsApiBase() {
+    const base = (getApiBase() || "").replace(/\/$/, "");
+    return base || "";
+  }
+
+  async function refreshClientsProblems(options = {}) {
+    if (!els.clientsProblemsList) return;
+    const force = !!options.force;
+    const apiBase = getClientsApiBase();
+    if (!apiBase) {
+      state.clients.listError = "Не настроен API base для mini app";
+      renderClientsTab();
+      return;
+    }
+    if (state.clients.loadingList && !force) return;
+    state.clients.loadingList = true;
+    state.clients.listError = "";
+    renderClientsTab();
+    try {
+      const payload = await fetchJson(`${apiBase}/clients/problems`, { method: "GET" });
+      const data = payloadData(payload) || payload || {};
+      const items = Array.isArray(data.items) ? data.items : [];
+      state.clients.problems = items.map((raw) => normalizeClientProblemItem(raw));
+      if (state.clients.selectedChatId) {
+        const found = state.clients.problems.find((x) => x.chat_id === state.clients.selectedChatId) || null;
+        state.clients.selectedProblem = found;
+        if (!found) {
+          state.clients.selectedChatId = "";
+          state.clients.historyMessages = [];
+          state.clients.historyError = "";
+        }
+      }
+    } catch (err) {
+      state.clients.listError = safeErr(err);
+      logEvent(`Clients/problems error: ${safeErr(err)}`);
+    } finally {
+      state.clients.loadingList = false;
+      renderClientsTab();
+    }
+  }
+
+  function normalizeClientProblemItem(raw) {
+    const item = raw && typeof raw === "object" ? raw : {};
+    return {
+      chat_id: String(item.chat_id || item.chatId || ""),
+      customer_id: String(item.customer_id || item.customerId || ""),
+      item_id: String(item.item_id || item.itemId || ""),
+      item_title: String(item.item_title || item.itemTitle || "Чат клиента"),
+      status: String(item.status || "problem"),
+      reason_type: String(item.reason_type || item.reasonType || ""),
+      last_activity_at: String(item.last_activity_at || item.lastActivityAt || ""),
+      last_message_preview: String(item.last_message_preview || item.lastMessagePreview || ""),
+      unread_count_estimate: clampInt(Number(item.unread_count_estimate ?? item.unreadCountEstimate ?? 0), 0, 9999, 0),
+    };
+  }
+
+  async function openClientsChat(chatId) {
+    if (!chatId) return;
+    if (state.clients.selectedChatId !== chatId) {
+      state.clients.selectedChatId = chatId;
+      state.clients.historyMessages = [];
+      state.clients.historyError = "";
+      state.clients.selectedProblem = state.clients.problems.find((x) => x.chat_id === chatId) || null;
+      renderClientsTab();
+    }
+    await refreshClientsChatHistory(chatId, { force: true });
+  }
+
+  async function refreshClientsChatHistory(chatId, options = {}) {
+    if (!chatId || !els.clientsThreadMessages) return;
+    const force = !!options.force;
+    const apiBase = getClientsApiBase();
+    if (!apiBase) {
+      state.clients.historyError = "Не настроен API base для mini app";
+      renderClientsTab();
+      return;
+    }
+    if (state.clients.historyLoading && !force) return;
+    state.clients.historyLoading = true;
+    state.clients.historyError = "";
+    renderClientsTab();
+    try {
+      const url = `${apiBase}/clients/chat/history?chat_id=${encodeURIComponent(chatId)}&limit=50`;
+      const payload = await fetchJson(url, { method: "GET" });
+      const data = payloadData(payload) || payload || {};
+      const messages = Array.isArray(data.messages) ? data.messages : [];
+      state.clients.historyMessages = messages.map((m) => normalizeClientHistoryMessage(m));
+      state.clients.selectedProblem = data.problem && typeof data.problem === "object"
+        ? { ...(state.clients.selectedProblem || {}), ...data.problem, chat_id: chatId }
+        : (state.clients.selectedProblem || state.clients.problems.find((x) => x.chat_id === chatId) || null);
+      if (data.chat && typeof data.chat === "object") {
+        const chatMeta = data.chat;
+        state.clients.selectedProblem = {
+          ...(state.clients.selectedProblem || {}),
+          chat_id: String(chatMeta.chat_id || chatId),
+          customer_id: String(chatMeta.customer_id || state.clients.selectedProblem?.customer_id || ""),
+          item_id: String(chatMeta.item_id || state.clients.selectedProblem?.item_id || ""),
+          item_title: String(chatMeta.item_title || state.clients.selectedProblem?.item_title || "Чат клиента"),
+        };
+      }
+    } catch (err) {
+      state.clients.historyError = safeErr(err);
+      logEvent(`Clients/history error: ${safeErr(err)}`);
+    } finally {
+      state.clients.historyLoading = false;
+      renderClientsTab();
+    }
+  }
+
+  function normalizeClientHistoryMessage(raw) {
+    const item = raw && typeof raw === "object" ? raw : {};
+    const role = String(item.author_role || item.authorRole || "").toLowerCase();
+    return {
+      message_id: String(item.message_id || item.messageId || ""),
+      created_at: String(item.created_at || item.createdAt || ""),
+      text: String(item.text || item.message_text || ""),
+      direction: String(item.direction || ""),
+      author_role: ["customer", "bot", "owner_manual", "seller_unknown"].includes(role) ? role : "seller_unknown",
+    };
+  }
+
+  async function sendClientsManualMessage() {
+    const chatId = String(state.clients.selectedChatId || "");
+    const text = String(state.clients.composerText || "").trim();
+    if (!chatId) {
+      logEvent("Clients/send skipped: chat not selected.");
+      return;
+    }
+    if (!text) {
+      logEvent("Clients/send skipped: empty text.");
+      return;
+    }
+    if (state.clients.sending) return;
+    const apiBase = getClientsApiBase();
+    if (!apiBase) {
+      logEvent("Clients/send skipped: API base is empty.");
+      return;
+    }
+    state.clients.sending = true;
+    renderClientsTab();
+    try {
+      const body = {
+        chat_id: chatId,
+        customer_id: state.clients.selectedProblem?.customer_id || "",
+        text,
+      };
+      await fetchJson(`${apiBase}/clients/chat/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      state.clients.composerText = "";
+      if (els.clientsComposerText) els.clientsComposerText.value = "";
+      await refreshClientsProblems({ force: true });
+      await refreshClientsChatHistory(chatId, { force: true });
+      logEvent("Clients/send: manual reply sent to Avito.");
+    } catch (err) {
+      logEvent(`Clients/send error: ${safeErr(err)}`);
+      state.clients.historyError = safeErr(err);
+    } finally {
+      state.clients.sending = false;
+      renderClientsTab();
+    }
+  }
+
+  async function resolveClientsProblemChat() {
+    const chatId = String(state.clients.selectedChatId || "");
+    if (!chatId) {
+      logEvent("Clients/resolve skipped: chat not selected.");
+      return;
+    }
+    if (state.clients.resolving) return;
+    const apiBase = getClientsApiBase();
+    if (!apiBase) {
+      logEvent("Clients/resolve skipped: API base is empty.");
+      return;
+    }
+    state.clients.resolving = true;
+    renderClientsTab();
+    try {
+      const body = {
+        chat_id: chatId,
+        resolved_by: state.owner && state.owner.username ? `@${state.owner.username}` : "miniapp_owner",
+      };
+      await fetchJson(`${apiBase}/clients/chat/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      logEvent("Clients/resolve: chat returned to bot mode.");
+      await refreshClientsProblems({ force: true });
+      state.clients.selectedChatId = "";
+      state.clients.selectedProblem = null;
+      state.clients.historyMessages = [];
+      state.clients.historyError = "";
+    } catch (err) {
+      logEvent(`Clients/resolve error: ${safeErr(err)}`);
+      state.clients.historyError = safeErr(err);
+    } finally {
+      state.clients.resolving = false;
+      renderClientsTab();
+    }
+  }
+
+  function renderClientsTab() {
+    if (!els.clientsProblemsList || !els.clientsThreadMessages) return;
+    renderClientsProblemsList();
+    renderClientsThread();
+  }
+
+  function renderClientsProblemsList() {
+    if (!els.clientsProblemsList || !els.clientsProblemsMeta) return;
+    const listEl = els.clientsProblemsList;
+    listEl.innerHTML = "";
+    const c = state.clients;
+    const count = Array.isArray(c.problems) ? c.problems.length : 0;
+    els.clientsProblemsMeta.textContent = c.loadingList
+      ? "Загружаем проблемные чаты..."
+      : (c.listError ? `Ошибка: ${c.listError}` : `Активных проблемных чатов: ${count}`);
+
+    if (c.loadingList && count === 0) {
+      const loading = document.createElement("div");
+      loading.className = "empty-state";
+      loading.textContent = "Загрузка...";
+      listEl.appendChild(loading);
+      return;
+    }
+    if (c.listError && count === 0) {
+      const err = document.createElement("div");
+      err.className = "empty-state";
+      err.textContent = "Не удалось загрузить список проблемных чатов.";
+      listEl.appendChild(err);
+      return;
+    }
+    if (!count) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "Нет активных проблемных чатов";
+      listEl.appendChild(empty);
+      return;
+    }
+
+    c.problems.forEach((item) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "clients-problem-row";
+      row.setAttribute("data-clients-chat-id", item.chat_id || "");
+      if (item.chat_id === c.selectedChatId) row.classList.add("is-active");
+
+      const title = document.createElement("div");
+      title.className = "clients-problem-title";
+      title.textContent = item.item_title || `Чат ${item.chat_id}`;
+      row.appendChild(title);
+
+      const sub = document.createElement("div");
+      sub.className = "clients-problem-sub";
+      sub.textContent = item.last_message_preview || item.reason_type || "Проблемный чат";
+      row.appendChild(sub);
+
+      const meta = document.createElement("div");
+      meta.className = "clients-problem-meta";
+      const reason = document.createElement("span");
+      reason.className = "status-pill is-warn";
+      reason.textContent = normalizeProblemReasonLabel(item.reason_type);
+      meta.appendChild(reason);
+      const time = document.createElement("span");
+      time.className = "mini-info-chip";
+      time.textContent = formatRelativeTime(item.last_activity_at);
+      meta.appendChild(time);
+      row.appendChild(meta);
+
+      listEl.appendChild(row);
+    });
+  }
+
+  function renderClientsThread() {
+    if (!els.clientsThreadMessages || !els.clientsThreadTitle || !els.clientsThreadMeta) return;
+    const c = state.clients;
+    const selected = c.selectedProblem || c.problems.find((x) => x.chat_id === c.selectedChatId) || null;
+
+    els.clientsThreadTitle.textContent = selected
+      ? (selected.item_title || `Чат ${selected.chat_id}`)
+      : "Выберите чат";
+    els.clientsThreadMeta.textContent = selected
+      ? `${normalizeProblemReasonLabel(selected.reason_type)} • ${selected.customer_id ? `клиент ${selected.customer_id}` : "Avito чат"}`
+      : "История Avito + ручной режим";
+
+    const thread = els.clientsThreadMessages;
+    thread.innerHTML = "";
+
+    if (!selected) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "Откройте проблемный чат слева, чтобы смотреть историю и отвечать вручную.";
+      thread.appendChild(empty);
+    } else if (c.historyLoading && c.historyMessages.length === 0) {
+      const loading = document.createElement("div");
+      loading.className = "empty-state";
+      loading.textContent = "Загружаем историю чата...";
+      thread.appendChild(loading);
+    } else if (c.historyError && c.historyMessages.length === 0) {
+      const err = document.createElement("div");
+      err.className = "empty-state";
+      err.textContent = `Ошибка загрузки истории: ${c.historyError}`;
+      thread.appendChild(err);
+    } else if (!c.historyMessages.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "История пока пустая.";
+      thread.appendChild(empty);
+    } else {
+      c.historyMessages.forEach((msg) => {
+        const row = document.createElement("div");
+        row.className = `clients-chat-msg role-${msg.author_role}`;
+        const bubble = document.createElement("div");
+        bubble.className = "clients-chat-bubble";
+        const text = document.createElement("div");
+        text.className = "clients-chat-text";
+        text.textContent = msg.text || "";
+        bubble.appendChild(text);
+        const meta = document.createElement("div");
+        meta.className = "clients-chat-meta";
+        meta.textContent = `${clientsRoleLabel(msg.author_role)} • ${formatMessageTs(msg.created_at)}`;
+        bubble.appendChild(meta);
+        row.appendChild(bubble);
+        thread.appendChild(row);
+      });
+      thread.scrollTop = thread.scrollHeight;
+    }
+
+    if (els.clientsComposerText && els.clientsComposerText.value !== c.composerText) {
+      els.clientsComposerText.value = c.composerText || "";
+    }
+    if (els.clientsComposerText) {
+      const disabled = !selected || c.sending || c.resolving;
+      els.clientsComposerText.disabled = disabled;
+    }
+    if (els.btnClientsSend) {
+      els.btnClientsSend.disabled = !selected || c.sending || c.resolving || !String(c.composerText || "").trim();
+      els.btnClientsSend.textContent = c.sending ? "Отправка..." : "Отправить";
+    }
+    if (els.btnClientsResolve) {
+      els.btnClientsResolve.disabled = !selected || c.sending || c.resolving;
+      els.btnClientsResolve.textContent = c.resolving ? "Закрываю..." : "Проблема решена";
+    }
+    if (els.btnClientsRefresh) {
+      els.btnClientsRefresh.disabled = c.loadingList || c.historyLoading || c.sending || c.resolving;
+      els.btnClientsRefresh.classList.toggle("is-spinning", c.loadingList || c.historyLoading);
+    }
+  }
+
+  function normalizeProblemReasonLabel(reason) {
+    const key = String(reason || "").toLowerCase();
+    if (!key) return "problem";
+    if (key.includes("install")) return "установка";
+    if (key.includes("complect")) return "комплектация";
+    if (key.includes("payment")) return "оплата";
+    if (key.includes("stock")) return "остаток";
+    if (key.includes("fit")) return "совместимость";
+    return key.replaceAll("_", " ");
+  }
+
+  function clientsRoleLabel(role) {
+    switch (String(role || "")) {
+      case "customer": return "Клиент";
+      case "bot": return "Бот";
+      case "owner_manual": return "Колян";
+      default: return "Продавец ?";
+    }
+  }
+
+  function formatMessageTs(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function formatRelativeTime(iso) {
+    if (!iso) return "нет даты";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "нет даты";
+    const diffMin = Math.round((Date.now() - d.getTime()) / 60000);
+    if (diffMin < 1) return "только что";
+    if (diffMin < 60) return `${diffMin} мин назад`;
+    const diffH = Math.round(diffMin / 60);
+    if (diffH < 24) return `${diffH} ч назад`;
+    const diffD = Math.round(diffH / 24);
+    return `${diffD} д назад`;
   }
 
   function getTodayWorkSnapshot() {
